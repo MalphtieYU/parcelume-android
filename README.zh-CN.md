@@ -41,6 +41,10 @@ Parcelume 包裹与待取页面
 
 Parcelume 可能提取来源、物流状态、运单号、取件码和更新时间。商品名称只有在通知本身包含时才能识别。完整通知正文只在内存中处理，不会写入数据库。
 
+## 下载测试版
+
+可在预览版本页面下载 [`parcelume-0.1.0-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.1.0-preview)。这是使用 Debug 签名的功能测试包，不是正式发行版。安装时 Android 可能要求允许浏览器或文件管理器“安装未知应用”；请只对你信任的安装来源临时开启，安装后可再关闭。
+
 ## 使用方法
 
 1. 在 Android 8.0 或更高版本的设备上安装 APK。

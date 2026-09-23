@@ -41,6 +41,10 @@ Parcelume timeline and pickup view
 
 Parcelume may extract the source, delivery status, tracking number, pickup code, update time, and—only when present in the notification—the item name. Raw notification text is processed in memory and is not stored.
 
+## Download the preview
+
+Download [`parcelume-0.1.0-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.1.0-preview) from the preview release. This is a debug-signed evaluation build, not a production release. Android may ask you to allow installation from your browser or file manager; enable that only for the installer you trust, then turn it off again if you prefer.
+
 ## Quick start
 
 1. Install the APK on Android 8.0 or later.
