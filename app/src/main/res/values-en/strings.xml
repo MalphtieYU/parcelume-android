@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Parcelume</string>
+    <string name="notification_listener_label">Parcelume notification access</string>
+</resources>

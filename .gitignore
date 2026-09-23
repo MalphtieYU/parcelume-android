@@ -1,0 +1,16 @@
+*.iml
+.gradle/
+.gradle-local/
+.kotlin/
+.toolchains/
+.tmp/
+dist/
+.idea/
+local.properties
+build/
+captures/
+qa/
+docs/images/launch.png
+.externalNativeBuild/
+.cxx/
+app/build/
