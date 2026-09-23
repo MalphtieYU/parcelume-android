@@ -2,5 +2,5 @@
     <string name="app_name">Parcelume</string>
     <string name="notification_listener_label">Parcelume 通知识别</string>
     <string name="accessibility_service_label">Parcelume 购物页面识别</string>
-    <string name="accessibility_service_description">仅在用户选中的购物与物流应用位于前台时读取当前可见文字，用于识别订单和包裹信息；不会点击、滚动、输入、截屏或保存原始页面。</string>
+    <string name="accessibility_service_description">仅在用户同意、未暂停且所选购物或物流应用位于前台时读取当前可见文字；付款、银行卡、密码与验证码页面会被拒绝，不保存原始页面。</string>
 </resources>

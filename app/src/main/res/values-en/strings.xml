@@ -2,5 +2,5 @@
     <string name="app_name">Parcelume</string>
     <string name="notification_listener_label">Parcelume notification access</string>
     <string name="accessibility_service_label">Parcelume shopping screen capture</string>
-    <string name="accessibility_service_description">Reads visible text only while a user-selected shopping or delivery app is in the foreground to identify orders and parcels. It never clicks, scrolls, types, takes screenshots, or stores the original screen.</string>
+    <string name="accessibility_service_description">Reads visible text only with consent, while unpaused and a selected shopping or delivery app is in the foreground. Payment, card, password and verification-code screens are rejected; raw screens are not stored.</string>
 </resources>

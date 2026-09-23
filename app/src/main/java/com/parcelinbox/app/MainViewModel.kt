@@ -49,6 +49,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _hasCompletedPermissionIntro = MutableStateFlow(app.settings.hasCompletedPermissionIntro)
     val hasCompletedPermissionIntro: StateFlow<Boolean> = _hasCompletedPermissionIntro.asStateFlow()
 
+    private val _hasAcceptedPrivacyDisclosure = MutableStateFlow(app.settings.hasAcceptedScreenCaptureDisclosure)
+    val hasAcceptedPrivacyDisclosure = _hasAcceptedPrivacyDisclosure.asStateFlow()
+
+    private val _capturePaused = MutableStateFlow(app.settings.capturePaused)
+    val capturePaused = _capturePaused.asStateFlow()
+
+    private val _hideItemNames = MutableStateFlow(app.settings.hideItemNames)
+    val hideItemNames = _hideItemNames.asStateFlow()
+
     init {
         refresh()
     }
@@ -64,6 +73,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _language.value = app.settings.appLanguage
         _hasCompletedOnboarding.value = app.settings.hasCompletedOnboarding
         _hasCompletedPermissionIntro.value = app.settings.hasCompletedPermissionIntro
+        _hasAcceptedPrivacyDisclosure.value = app.settings.hasAcceptedScreenCaptureDisclosure
+        _capturePaused.value = app.settings.capturePaused
+        _hideItemNames.value = app.settings.hideItemNames
     }
 
     fun setSourceEnabled(packageName: String, enabled: Boolean) {
@@ -102,6 +114,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun acceptScreenCaptureDisclosure() {
         app.settings.hasAcceptedScreenCaptureDisclosure = true
+        app.settings.capturePaused = false
+        _hasAcceptedPrivacyDisclosure.value = true
+        _capturePaused.value = false
+    }
+
+    fun revokePrivacyConsent() {
+        app.settings.hasAcceptedScreenCaptureDisclosure = false
+        app.settings.capturePaused = true
+        _hasAcceptedPrivacyDisclosure.value = false
+        _capturePaused.value = true
+    }
+
+    fun setCapturePaused(paused: Boolean) {
+        app.settings.capturePaused = paused
+        _capturePaused.value = paused
+    }
+
+    fun setHideItemNames(hidden: Boolean) {
+        app.settings.hideItemNames = hidden
+        _hideItemNames.value = hidden
     }
 
     fun addDemoData() {

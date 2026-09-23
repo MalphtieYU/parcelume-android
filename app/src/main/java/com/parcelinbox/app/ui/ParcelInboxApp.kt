@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -132,6 +134,7 @@ fun ParcelInboxApp(
     val hasScreenCaptureAccess by viewModel.hasScreenCaptureAccess.collectAsState()
     val sources by viewModel.sources.collectAsState()
     val language by viewModel.language.collectAsState()
+    val hasAcceptedPrivacyDisclosure by viewModel.hasAcceptedPrivacyDisclosure.collectAsState()
     var showLaunchScreen by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
@@ -148,9 +151,10 @@ fun ParcelInboxApp(
             when {
                 launching -> LaunchScreen()
                 !onboardingComplete -> WelcomeScreen(onStart = viewModel::completeOnboarding)
-                !permissionIntroComplete -> PermissionSetupScreen(
+                !permissionIntroComplete || (hasScreenCaptureAccess && !hasAcceptedPrivacyDisclosure) -> PermissionSetupScreen(
                     hasScreenCaptureAccess = hasScreenCaptureAccess,
                     hasNotificationAccess = hasNotificationAccess,
+                    hasAcceptedPrivacyDisclosure = hasAcceptedPrivacyDisclosure,
                     sources = sources,
                     onToggleSource = viewModel::setSourceEnabled,
                     onAcceptScreenCaptureDisclosure = viewModel::acceptScreenCaptureDisclosure,
@@ -419,10 +423,12 @@ private fun WelcomeScreen(onStart: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PermissionSetupScreen(
     hasScreenCaptureAccess: Boolean,
     hasNotificationAccess: Boolean,
+    hasAcceptedPrivacyDisclosure: Boolean,
     sources: List<SourceChoice>,
     onToggleSource: (String, Boolean) -> Unit,
     onAcceptScreenCaptureDisclosure: () -> Unit,
@@ -432,7 +438,9 @@ private fun PermissionSetupScreen(
 ) {
     val selectedCount = sources.count { it.enabled }
     val ready = hasScreenCaptureAccess && selectedCount > 0
-    var disclosureAccepted by remember { mutableStateOf(false) }
+    var disclosureAccepted by remember(hasAcceptedPrivacyDisclosure) {
+        mutableStateOf(hasAcceptedPrivacyDisclosure)
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
@@ -500,16 +508,16 @@ private fun PermissionSetupScreen(
                     number = "2",
                     title = tr("不替你操作，也不保存原页面", "No control and no raw-screen storage"),
                     body = tr(
-                        "不会点击、滚动、输入或截屏；只保存识别出的商品标题、订单号、运单号、状态和时间。",
-                        "It never clicks, scrolls, types, or takes screenshots. Only extracted item, order, tracking, status, and time fields are stored."
+                        "不会点击、滚动、输入或截屏；付款、银行卡、密码和验证码页面会被拒绝解析。",
+                        "It never clicks, scrolls, types, or takes screenshots. Payment, card, password and verification-code screens are rejected."
                     )
                 )
                 PrivacyPoint(
                     number = "3",
                     title = tr("当前版本仍完全本地", "This version remains local-only"),
                     body = tr(
-                        "不申请联网权限，不读取购物账号、照片、联系人或短信；实时快递联网查询尚未启用。",
-                        "No internet permission and no access to shopping credentials, photos, contacts, or messages. Live carrier lookup is not enabled yet."
+                        "不申请联网权限；保存的商品、订单、运单和取件信息使用 Android Keystore 在本机加密。",
+                        "No internet permission. Stored item, order, tracking and pickup fields are encrypted locally with Android Keystore."
                     )
                 )
             }
@@ -523,8 +531,8 @@ private fun PermissionSetupScreen(
                     fontSize = 12.sp,
                     lineHeight = 17.sp
                 )
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     sources.forEach { choice ->
@@ -546,7 +554,7 @@ private fun PermissionSetupScreen(
             }
         }
 
-        if (!hasScreenCaptureAccess) {
+        if (!hasAcceptedPrivacyDisclosure) {
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth().clickable { disclosureAccepted = !disclosureAccepted },
@@ -564,8 +572,8 @@ private fun PermissionSetupScreen(
                         )
                         Text(
                             tr(
-                                "我理解这是一项敏感的系统辅助功能权限，并同意 Parcelume 仅按上述范围处理所选应用的可见文字。",
-                                "I understand this is sensitive system accessibility access and agree that Parcelume may process visible text from selected apps only as described above."
+                                "我理解页面识别和可选的通知识别会处理所选平台中的订单与物流信息；同意仅用于本地整理。此确认保存一次，可随时在设置中撤销。",
+                                "I understand screen capture and optional notification access process order and delivery details from selected apps for local organization only. This one-time consent can be revoked in Settings."
                             ),
                             modifier = Modifier.weight(1f).padding(top = 9.dp),
                             color = Ink,
@@ -584,11 +592,11 @@ private fun PermissionSetupScreen(
                         if (ready) {
                             onContinue()
                         } else {
-                            onAcceptScreenCaptureDisclosure()
+                            if (!hasAcceptedPrivacyDisclosure) onAcceptScreenCaptureDisclosure()
                             onOpenScreenCaptureSettings()
                         }
                     },
-                    enabled = ready || (selectedCount > 0 && disclosureAccepted),
+                    enabled = ready || (selectedCount > 0 && (disclosureAccepted || hasAcceptedPrivacyDisclosure)),
                     modifier = Modifier.fillMaxWidth().height(58.dp),
                     shape = RoundedCornerShape(30.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Ink)
@@ -597,7 +605,7 @@ private fun PermissionSetupScreen(
                         when {
                             ready -> tr("完成设置，进入 Parcelume", "Finish setup")
                             selectedCount == 0 -> tr("请先选择一个平台", "Select at least one app")
-                            !disclosureAccepted -> tr("请先阅读并同意", "Review and agree first")
+                            !disclosureAccepted && !hasAcceptedPrivacyDisclosure -> tr("请先阅读并同意", "Review and agree first")
                             !hasScreenCaptureAccess -> tr("开启购物页面识别", "Enable shopping screen capture")
                             else -> tr("请先选择一个来源", "Select at least one source")
                         },
@@ -619,7 +627,14 @@ private fun PermissionSetupScreen(
                     )
                 }
                 if (!hasNotificationAccess) {
-                    TextButton(onClick = onOpenNotificationSettings, modifier = Modifier.fillMaxWidth()) {
+                    TextButton(
+                        onClick = {
+                            if (!hasAcceptedPrivacyDisclosure) onAcceptScreenCaptureDisclosure()
+                            onOpenNotificationSettings()
+                        },
+                        enabled = disclosureAccepted || hasAcceptedPrivacyDisclosure,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text(
                             tr("可选：开启通知辅助识别", "Optional: enable notification backup"),
                             color = Ink,
@@ -669,6 +684,9 @@ private fun MainShell(
     val hasScreenCaptureAccess by viewModel.hasScreenCaptureAccess.collectAsState()
     val sources by viewModel.sources.collectAsState()
     val retention by viewModel.retention.collectAsState()
+    val hasAcceptedPrivacyDisclosure by viewModel.hasAcceptedPrivacyDisclosure.collectAsState()
+    val capturePaused by viewModel.capturePaused.collectAsState()
+    val hideItemNames by viewModel.hideItemNames.collectAsState()
     var destination by remember { mutableStateOf(Destination.HOME) }
     var selectedParcel by remember { mutableStateOf<ParcelItem?>(null) }
 
@@ -700,10 +718,13 @@ private fun MainShell(
                     hasNotificationAccess = hasAccess,
                     hasEnabledSource = sources.any { it.enabled },
                     onOpenScreenCaptureSettings = {
-                        viewModel.acceptScreenCaptureDisclosure()
-                        onOpenScreenCaptureSettings()
+                        if (hasAcceptedPrivacyDisclosure) onOpenScreenCaptureSettings()
+                        else destination = Destination.SETTINGS
                     },
-                    onOpenNotificationSettings = onOpenNotificationSettings,
+                    onOpenNotificationSettings = {
+                        if (hasAcceptedPrivacyDisclosure) onOpenNotificationSettings()
+                        else destination = Destination.SETTINGS
+                    },
                     onOpenSettings = { destination = Destination.SETTINGS },
                     onOpenAll = { destination = Destination.PARCELS },
                     onSelectParcel = { selectedParcel = it }
@@ -724,12 +745,18 @@ private fun MainShell(
                     sources = sources,
                     retention = retention,
                     language = LocalAppLanguage.current,
+                    hasAcceptedPrivacyDisclosure = hasAcceptedPrivacyDisclosure,
+                    capturePaused = capturePaused,
+                    hideItemNames = hideItemNames,
                     onOpenScreenCaptureSettings = onOpenScreenCaptureSettings,
                     onOpenNotificationSettings = onOpenNotificationSettings,
                     onAcceptScreenCaptureDisclosure = viewModel::acceptScreenCaptureDisclosure,
                     onToggleSource = viewModel::setSourceEnabled,
                     onSetRetention = viewModel::setRetention,
                     onSetLanguage = viewModel::setLanguage,
+                    onSetCapturePaused = viewModel::setCapturePaused,
+                    onSetHideItemNames = viewModel::setHideItemNames,
+                    onRevokePrivacyConsent = viewModel::revokePrivacyConsent,
                     onAddDemoData = viewModel::addDemoData,
                     onDeleteAll = viewModel::deleteAll,
                     onShowOnboarding = viewModel::showOnboardingAgain
@@ -1234,18 +1261,25 @@ private fun SettingsScreen(
     sources: List<SourceChoice>,
     retention: RetentionPolicy,
     language: AppLanguage,
+    hasAcceptedPrivacyDisclosure: Boolean,
+    capturePaused: Boolean,
+    hideItemNames: Boolean,
     onOpenScreenCaptureSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onAcceptScreenCaptureDisclosure: () -> Unit,
     onToggleSource: (String, Boolean) -> Unit,
     onSetRetention: (RetentionPolicy) -> Unit,
     onSetLanguage: (AppLanguage) -> Unit,
+    onSetCapturePaused: (Boolean) -> Unit,
+    onSetHideItemNames: (Boolean) -> Unit,
+    onRevokePrivacyConsent: () -> Unit,
     onAddDemoData: () -> Unit,
     onDeleteAll: () -> Unit,
     onShowOnboarding: () -> Unit
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
-    var confirmScreenCapture by remember { mutableStateOf(false) }
+    var confirmPrivacyConsent by remember { mutableStateOf(false) }
+    var permissionTarget by remember { mutableStateOf("screen") }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
@@ -1278,14 +1312,18 @@ private fun SettingsScreen(
             SettingsSection(title = tr("自动识别", "Automatic capture")) {
                 SettingActionRow(
                     title = tr("购物页面识别", "Shopping screen capture"),
-                    subtitle = if (hasScreenCaptureAccess) {
+                    subtitle = if (hasScreenCaptureAccess && !capturePaused && hasAcceptedPrivacyDisclosure) {
                         tr("已开启 · 只读取所选应用的当前可见文字", "On · visible text from selected apps only")
                     } else {
-                        tr("主要来源 · 需要敏感的系统辅助功能权限", "Primary source · requires sensitive accessibility access")
+                        tr("已暂停或尚未授权 · 需要系统辅助功能权限", "Paused or not authorized · needs accessibility access")
                     },
                     action = if (hasScreenCaptureAccess) tr("系统设置", "Settings") else tr("了解并开启", "Review"),
                     onClick = {
-                        if (hasScreenCaptureAccess) onOpenScreenCaptureSettings() else confirmScreenCapture = true
+                        if (hasAcceptedPrivacyDisclosure) onOpenScreenCaptureSettings()
+                        else {
+                            permissionTarget = "screen"
+                            confirmPrivacyConsent = true
+                        }
                     }
                 )
                 HorizontalDivider(color = Color(0xFFF0EDF1))
@@ -1297,7 +1335,25 @@ private fun SettingsScreen(
                         tr("可选，不再是自动识别的唯一来源", "Optional · no longer the only automatic source")
                     },
                     action = if (hasNotificationAccess) tr("已开启", "Enabled") else tr("去开启", "Open"),
-                    onClick = onOpenNotificationSettings
+                    onClick = {
+                        if (hasAcceptedPrivacyDisclosure) onOpenNotificationSettings()
+                        else {
+                            permissionTarget = "notification"
+                            confirmPrivacyConsent = true
+                        }
+                    }
+                )
+                HorizontalDivider(color = Color(0xFFF0EDF1))
+                SettingSwitchRow(
+                    title = tr("暂停全部自动识别", "Pause all automatic capture"),
+                    checked = capturePaused,
+                    onCheckedChange = onSetCapturePaused
+                )
+                Text(
+                    tr("暂停后，即使系统权限仍开启，页面与通知也会被立即忽略。", "When paused, screens and notifications are immediately ignored even if system access remains enabled."),
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
                 )
                 HorizontalDivider(color = Color(0xFFF0EDF1))
                 sources.forEach { choice ->
@@ -1306,6 +1362,38 @@ private fun SettingsScreen(
                         checked = choice.enabled,
                         onCheckedChange = { onToggleSource(choice.source.packageName, it) }
                     )
+                }
+            }
+        }
+
+        item {
+            SettingsSection(title = tr("隐私保护", "Privacy protection")) {
+                SettingSwitchRow(
+                    title = tr("隐藏商品名称", "Hide item names"),
+                    checked = hideItemNames,
+                    onCheckedChange = onSetHideItemNames
+                )
+                Text(
+                    tr(
+                        "默认开启。开启后新识别记录只显示“平台包裹”，不会保存真实商品名称；已有记录不会自动改名。",
+                        "On by default. New records show “Platform parcel” instead of saving real item names; existing records are not renamed automatically."
+                    ),
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                HorizontalDivider(color = Color(0xFFF0EDF1))
+                Text(
+                    tr(
+                        "敏感字段已使用 Android Keystore 本地加密；付款、银行卡、密码和验证码页面拒绝解析；应用内容禁止截屏和最近任务预览。",
+                        "Sensitive fields are encrypted locally with Android Keystore; payment, card, password and verification-code screens are rejected; screenshots and recent-app previews are blocked."
+                    ),
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                TextButton(onClick = onRevokePrivacyConsent) {
+                    Text(tr("撤销隐私同意并暂停识别", "Revoke consent and pause capture"), color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -1342,8 +1430,8 @@ private fun SettingsScreen(
         item {
             Text(
                 tr(
-                    "Parcelume 0.2 仍不申请网络权限。页面与通知原文只在内存中解析，不写入数据库；当前尚不提供实时联网物流查询。",
-                    "Parcelume 0.2 still has no network permission. Raw screen and notification text is parsed in memory and never stored; live carrier lookup is not available yet."
+                    "Parcelume 0.3 仍不申请网络权限。原文只在内存中解析，结构化敏感字段加密保存在本机；当前尚不提供实时联网物流查询。",
+                    "Parcelume 0.3 still has no network permission. Raw text is parsed in memory and structured sensitive fields are encrypted locally; live carrier lookup is not available yet."
                 ),
                 color = Muted,
                 fontSize = 12.sp,
@@ -1353,27 +1441,28 @@ private fun SettingsScreen(
         }
     }
 
-    if (confirmScreenCapture) {
+    if (confirmPrivacyConsent) {
         AlertDialog(
-            onDismissRequest = { confirmScreenCapture = false },
-            title = { Text(tr("开启购物页面识别？", "Enable shopping screen capture?"), fontWeight = FontWeight.Black) },
+            onDismissRequest = { confirmPrivacyConsent = false },
+            title = { Text(tr("同意本地识别？", "Allow local capture?"), fontWeight = FontWeight.Black) },
             text = {
                 Text(
                     tr(
-                        "Android 会显示范围较广的辅助功能警告。Parcelume 实际只在你选择的购物与物流应用位于前台时读取可见文字，用来提取商品标题、订单号、运单号和状态；不会点击、滚动、输入、截屏或保存原始页面。",
-                        "Android shows a broad accessibility warning. Parcelume actually reads visible text only while a selected shopping or delivery app is in the foreground, to extract item, order, tracking, and status fields. It never clicks, scrolls, types, takes screenshots, or stores the original screen."
+                        "Parcelume 会处理所选平台中的订单与物流信息，仅用于本机整理。不会联网，不会操作其他应用；付款、银行卡、密码和验证码页面会被拒绝。此次同意会保存，除非你主动撤销，否则不会反复询问。",
+                        "Parcelume processes order and delivery details from selected apps for local organization only. It has no network access, never controls other apps, and rejects payment, card, password and verification-code screens. Consent is saved and is not requested again unless you revoke it."
                     )
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
                     onAcceptScreenCaptureDisclosure()
-                    confirmScreenCapture = false
-                    onOpenScreenCaptureSettings()
+                    confirmPrivacyConsent = false
+                    if (permissionTarget == "notification") onOpenNotificationSettings()
+                    else onOpenScreenCaptureSettings()
                 }) { Text(tr("理解并打开系统设置", "Agree and open settings"), color = Ink) }
             },
             dismissButton = {
-                TextButton(onClick = { confirmScreenCapture = false }) {
+                TextButton(onClick = { confirmPrivacyConsent = false }) {
                     Text(tr("取消", "Cancel"), color = Muted)
                 }
             }
@@ -1583,9 +1672,22 @@ private fun localizedSourceLabel(packageName: String, fallback: String): String 
     "com.taobao.taobao", "demo.taobao" -> tr("淘宝", "Taobao")
     "com.jingdong.app.mall", "demo.jd" -> tr("京东", "JD")
     "com.xunmeng.pinduoduo" -> tr("拼多多", "Pinduoduo")
+    "com.tmall.wireless" -> tr("天猫", "Tmall")
     "com.cainiao.wireless", "demo.cainiao" -> tr("菜鸟", "Cainiao")
     "com.sf.activity" -> tr("顺丰", "SF Express")
     "com.amazon.mShop.android.shopping" -> "Amazon"
+    "com.einnovation.temu" -> "Temu"
+    "com.alibaba.aliexpresshd" -> "AliExpress"
+    "com.ebay.mobile" -> "eBay"
+    "com.walmart.android" -> "Walmart"
+    "com.zzkko" -> "SHEIN"
+    "com.etsy.android" -> "Etsy"
+    "com.alibaba.intl.android.apps.poseidon" -> "Alibaba.com"
+    "com.lazada.android" -> "Lazada"
+    "com.shopee.id" -> "Shopee Indonesia"
+    "com.flipkart.android" -> "Flipkart"
+    "com.mercadolibre" -> "Mercado Libre"
+    "jp.co.rakuten.android" -> "Rakuten"
     else -> fallback
 }
 

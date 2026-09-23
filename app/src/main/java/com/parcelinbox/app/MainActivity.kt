@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -17,6 +18,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Parcel details can contain pickup codes and order references. Keep
+        // them out of screenshots, screen recordings and recent-app previews.
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent {
             ParcelInboxTheme {
                 ParcelInboxApp(

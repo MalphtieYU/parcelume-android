@@ -27,9 +27,22 @@ class LocalSettings(context: Context) {
         ShoppingSource("com.taobao.taobao", "淘宝"),
         ShoppingSource("com.jingdong.app.mall", "京东"),
         ShoppingSource("com.xunmeng.pinduoduo", "拼多多"),
+        ShoppingSource("com.tmall.wireless", "天猫"),
         ShoppingSource("com.cainiao.wireless", "菜鸟"),
         ShoppingSource("com.sf.activity", "顺丰"),
-        ShoppingSource("com.amazon.mShop.android.shopping", "Amazon")
+        ShoppingSource("com.amazon.mShop.android.shopping", "Amazon"),
+        ShoppingSource("com.einnovation.temu", "Temu"),
+        ShoppingSource("com.alibaba.aliexpresshd", "AliExpress"),
+        ShoppingSource("com.ebay.mobile", "eBay"),
+        ShoppingSource("com.walmart.android", "Walmart"),
+        ShoppingSource("com.zzkko", "SHEIN"),
+        ShoppingSource("com.etsy.android", "Etsy"),
+        ShoppingSource("com.alibaba.intl.android.apps.poseidon", "Alibaba.com"),
+        ShoppingSource("com.lazada.android", "Lazada"),
+        ShoppingSource("com.shopee.id", "Shopee Indonesia"),
+        ShoppingSource("com.flipkart.android", "Flipkart"),
+        ShoppingSource("com.mercadolibre", "Mercado Libre"),
+        ShoppingSource("jp.co.rakuten.android", "Rakuten")
     )
 
     fun isSourceEnabled(packageName: String): Boolean =
@@ -80,12 +93,28 @@ class LocalSettings(context: Context) {
             preferences.edit { putBoolean(KEY_SCREEN_CAPTURE_DISCLOSURE, value) }
         }
 
+    var capturePaused: Boolean
+        get() = preferences.getBoolean(KEY_CAPTURE_PAUSED, false)
+        set(value) {
+            preferences.edit { putBoolean(KEY_CAPTURE_PAUSED, value) }
+        }
+
+    var hideItemNames: Boolean
+        get() = preferences.getBoolean(KEY_HIDE_ITEM_NAMES, true)
+        set(value) {
+            preferences.edit { putBoolean(KEY_HIDE_ITEM_NAMES, value) }
+        }
+
     private companion object {
         const val PREFERENCES_NAME = "local_settings"
         const val KEY_RETENTION = "retention_policy"
         const val KEY_LANGUAGE = "app_language"
         const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
         const val KEY_PERMISSION_INTRO_COMPLETE = "permission_intro_complete"
-        const val KEY_SCREEN_CAPTURE_DISCLOSURE = "screen_capture_disclosure_v1"
+        // A new key is used only when the disclosed data scope materially changes.
+        // Once accepted, normal launches and permission checks never ask again.
+        const val KEY_SCREEN_CAPTURE_DISCLOSURE = "privacy_disclosure_v2"
+        const val KEY_CAPTURE_PAUSED = "capture_paused"
+        const val KEY_HIDE_ITEM_NAMES = "hide_item_names"
     }
 }

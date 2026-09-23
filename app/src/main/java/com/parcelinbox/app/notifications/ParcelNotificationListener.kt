@@ -11,6 +11,8 @@ class ParcelNotificationListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val application = applicationContext as ParcelInboxApplication
+        if (!application.settings.hasAcceptedScreenCaptureDisclosure) return
+        if (application.settings.capturePaused) return
         val packageName = sbn.packageName
         if (!application.settings.isSourceEnabled(packageName)) return
 
@@ -30,8 +32,14 @@ class ParcelNotificationListener : NotificationListenerService() {
             observedAt = sbn.postTime
         ) ?: return
 
+        val privacySafe = if (application.settings.hideItemNames) {
+            parsed.copy(title = "${parsed.sourceLabel} 包裹")
+        } else {
+            parsed
+        }
+
         databaseExecutor.execute {
-            application.repository.accept(parsed)
+            application.repository.accept(privacySafe)
         }
     }
 

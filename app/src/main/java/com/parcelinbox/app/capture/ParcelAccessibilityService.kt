@@ -20,6 +20,7 @@ class ParcelAccessibilityService : AccessibilityService() {
         val currentEvent = event ?: return
         val application = applicationContext as ParcelInboxApplication
         if (!application.settings.hasAcceptedScreenCaptureDisclosure) return
+        if (application.settings.capturePaused) return
 
         val packageName = currentEvent.packageName?.toString().orEmpty()
         if (packageName.isBlank() || !application.settings.isSourceEnabled(packageName)) return
@@ -29,12 +30,14 @@ class ParcelAccessibilityService : AccessibilityService() {
         if (now - lastAcceptedAt < MIN_CAPTURE_INTERVAL_MS) return
 
         val root = rootInActiveWindow ?: currentEvent.source ?: return
+        if (root.packageName?.toString() != packageName) return
         val visibleText = collectVisibleText(root)
         val parsed = ParcelScreenParser.parse(
             sourcePackage = packageName,
             sourceLabel = application.settings.sourceLabel(packageName) ?: packageName,
             visibleTexts = visibleText,
-            observedAt = now
+            observedAt = now,
+            includeItemTitle = !application.settings.hideItemNames
         ) ?: return
 
         val fingerprint = listOf(
@@ -68,7 +71,7 @@ class ParcelAccessibilityService : AccessibilityService() {
             val node = queue.removeFirst()
             visited += 1
 
-            if (node.isVisibleToUser) {
+            if (node.isVisibleToUser && !node.isPassword) {
                 node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(output::add)
                 node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(output::add)
             }

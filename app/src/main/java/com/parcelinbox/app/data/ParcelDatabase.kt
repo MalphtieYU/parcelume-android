@@ -11,6 +11,8 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
     null,
     DATABASE_VERSION
 ) {
+    private val crypto = LocalFieldCrypto()
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
@@ -27,12 +29,16 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                 updated_at INTEGER NOT NULL,
                 completed_at INTEGER,
                 archived INTEGER NOT NULL DEFAULT 0,
-                capture_method TEXT NOT NULL DEFAULT 'NOTIFICATION'
+                capture_method TEXT NOT NULL DEFAULT 'NOTIFICATION',
+                title_fingerprint TEXT NOT NULL,
+                order_fingerprint TEXT,
+                tracking_fingerprint TEXT
             )
             """.trimIndent()
         )
-        db.execSQL("CREATE INDEX idx_parcels_tracking ON parcels(tracking_number)")
-        db.execSQL("CREATE INDEX idx_parcels_order_reference ON parcels(order_reference)")
+        db.execSQL("CREATE INDEX idx_parcels_tracking_fingerprint ON parcels(tracking_fingerprint)")
+        db.execSQL("CREATE INDEX idx_parcels_order_fingerprint ON parcels(order_fingerprint)")
+        db.execSQL("CREATE INDEX idx_parcels_title_fingerprint ON parcels(title_fingerprint)")
         db.execSQL("CREATE INDEX idx_parcels_updated ON parcels(updated_at DESC)")
     }
 
@@ -41,6 +47,17 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
             db.execSQL("ALTER TABLE parcels ADD COLUMN order_reference TEXT")
             db.execSQL("ALTER TABLE parcels ADD COLUMN capture_method TEXT NOT NULL DEFAULT 'NOTIFICATION'")
             db.execSQL("CREATE INDEX idx_parcels_order_reference ON parcels(order_reference)")
+        }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE parcels ADD COLUMN title_fingerprint TEXT")
+            db.execSQL("ALTER TABLE parcels ADD COLUMN order_fingerprint TEXT")
+            db.execSQL("ALTER TABLE parcels ADD COLUMN tracking_fingerprint TEXT")
+            migratePlaintextFields(db)
+            db.execSQL("DROP INDEX IF EXISTS idx_parcels_tracking")
+            db.execSQL("DROP INDEX IF EXISTS idx_parcels_order_reference")
+            db.execSQL("CREATE INDEX idx_parcels_tracking_fingerprint ON parcels(tracking_fingerprint)")
+            db.execSQL("CREATE INDEX idx_parcels_order_fingerprint ON parcels(order_fingerprint)")
+            db.execSQL("CREATE INDEX idx_parcels_title_fingerprint ON parcels(title_fingerprint)")
         }
     }
 
@@ -52,10 +69,17 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
         val values = ContentValues().apply {
             put("source_package", parsed.sourcePackage)
             put("source_label", parsed.sourceLabel)
-            put("title", parsed.title)
-            parsed.orderReference?.let { put("order_reference", it) }
-            parsed.trackingNumber?.let { put("tracking_number", it) }
-            parsed.pickupCode?.let { put("pickup_code", it) }
+            put("title", crypto.encrypt(parsed.title))
+            put("title_fingerprint", crypto.fingerprint(parsed.title))
+            parsed.orderReference?.let {
+                put("order_reference", crypto.encrypt(it))
+                put("order_fingerprint", crypto.fingerprint(it))
+            }
+            parsed.trackingNumber?.let {
+                put("tracking_number", crypto.encrypt(it))
+                put("tracking_fingerprint", crypto.fingerprint(it))
+            }
+            parsed.pickupCode?.let { put("pickup_code", crypto.encrypt(it)) }
             put("status", parsed.status.name)
             put("updated_at", parsed.observedAt)
             put("capture_method", parsed.captureMethod.name)
@@ -76,8 +100,8 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
             db.query(
                 "parcels",
                 arrayOf("id"),
-                "tracking_number = ?",
-                arrayOf(parsed.trackingNumber),
+                "tracking_fingerprint = ?",
+                arrayOf(crypto.fingerprint(parsed.trackingNumber)),
                 null,
                 null,
                 "updated_at DESC",
@@ -91,8 +115,8 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
             db.query(
                 "parcels",
                 arrayOf("id"),
-                "source_package = ? AND order_reference = ?",
-                arrayOf(parsed.sourcePackage, parsed.orderReference),
+                "source_package = ? AND order_fingerprint = ?",
+                arrayOf(parsed.sourcePackage, crypto.fingerprint(parsed.orderReference)),
                 null,
                 null,
                 "updated_at DESC",
@@ -107,8 +131,8 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
         db.query(
             "parcels",
             arrayOf("id"),
-            "source_package = ? AND title = ? AND updated_at >= ? AND status != ?",
-            arrayOf(parsed.sourcePackage, parsed.title, cutoff.toString(), ParcelStatus.COMPLETED.name),
+            "source_package = ? AND title_fingerprint = ? AND updated_at >= ? AND status != ?",
+            arrayOf(parsed.sourcePackage, crypto.fingerprint(parsed.title), cutoff.toString(), ParcelStatus.COMPLETED.name),
             null,
             null,
             "updated_at DESC",
@@ -136,10 +160,11 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                             id = cursor.getLong(cursor.getColumnIndexOrThrow("id")),
                             sourcePackage = cursor.getString(cursor.getColumnIndexOrThrow("source_package")),
                             sourceLabel = cursor.getString(cursor.getColumnIndexOrThrow("source_label")),
-                            title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
-                            orderReference = cursor.getString(cursor.getColumnIndexOrThrow("order_reference")),
-                            trackingNumber = cursor.getString(cursor.getColumnIndexOrThrow("tracking_number")),
-                            pickupCode = cursor.getString(cursor.getColumnIndexOrThrow("pickup_code")),
+                            title = crypto.decrypt(cursor.getString(cursor.getColumnIndexOrThrow("title")))
+                                ?: "受保护的包裹",
+                            orderReference = crypto.decrypt(cursor.getString(cursor.getColumnIndexOrThrow("order_reference"))),
+                            trackingNumber = crypto.decrypt(cursor.getString(cursor.getColumnIndexOrThrow("tracking_number"))),
+                            pickupCode = crypto.decrypt(cursor.getString(cursor.getColumnIndexOrThrow("pickup_code"))),
                             status = ParcelStatus.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("status"))),
                             createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
                             updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow("updated_at")),
@@ -177,6 +202,40 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
     @Synchronized
     fun deleteAll(): Int = writableDatabase.delete("parcels", null, null)
 
+    private fun migratePlaintextFields(db: SQLiteDatabase) {
+        db.query(
+            "parcels",
+            arrayOf("id", "title", "order_reference", "tracking_number", "pickup_code"),
+            null,
+            null,
+            null,
+            null,
+            null
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(cursor.getColumnIndexOrThrow("id"))
+                val title = cursor.getString(cursor.getColumnIndexOrThrow("title"))
+                val order = cursor.getString(cursor.getColumnIndexOrThrow("order_reference"))
+                val tracking = cursor.getString(cursor.getColumnIndexOrThrow("tracking_number"))
+                val pickup = cursor.getString(cursor.getColumnIndexOrThrow("pickup_code"))
+                val values = ContentValues().apply {
+                    put("title", crypto.encrypt(title))
+                    put("title_fingerprint", crypto.fingerprint(title))
+                    order?.let {
+                        put("order_reference", crypto.encrypt(it))
+                        put("order_fingerprint", crypto.fingerprint(it))
+                    }
+                    tracking?.let {
+                        put("tracking_number", crypto.encrypt(it))
+                        put("tracking_fingerprint", crypto.fingerprint(it))
+                    }
+                    pickup?.let { put("pickup_code", crypto.encrypt(it)) }
+                }
+                db.update("parcels", values, "id = ?", arrayOf(id.toString()))
+            }
+        }
+    }
+
     private fun android.database.Cursor.getNullableLong(column: String): Long? {
         val index = getColumnIndexOrThrow(column)
         return if (isNull(index)) null else getLong(index)
@@ -184,6 +243,6 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
 
     private companion object {
         const val DATABASE_NAME = "parcel_inbox.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
     }
 }

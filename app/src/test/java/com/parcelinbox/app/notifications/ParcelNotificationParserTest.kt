@@ -46,4 +46,30 @@ class ParcelNotificationParserTest {
 
         assertNull(parsed)
     }
+
+    @Test
+    fun `rejects payment credential notifications`() {
+        val parsed = ParcelNotificationParser.parse(
+            sourcePackage = "com.taobao.taobao",
+            sourceLabel = "淘宝",
+            notificationTitle = "订单支付",
+            notificationText = "验证码 123456，请勿告诉他人",
+            observedAt = 100L
+        )
+
+        assertNull(parsed)
+    }
+
+    @Test
+    fun `does not use address or phone as a title`() {
+        val parsed = ParcelNotificationParser.parse(
+            sourcePackage = "com.jingdong.app.mall",
+            sourceLabel = "京东",
+            notificationTitle = "收货地址：北京市朝阳区",
+            notificationText = "包裹已发货，运单号：SF1234567890",
+            observedAt = 100L
+        )
+
+        assertEquals("包裹已发货，运单号：SF1234567890", parsed?.title)
+    }
 }
