@@ -1,12 +1,17 @@
 package com.parcelinbox.app
 
 import android.app.Application
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.Context
+import android.view.accessibility.AccessibilityManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
+import com.parcelinbox.app.capture.ParcelAccessibilityService
+import com.parcelinbox.app.data.CaptureMethod
 import com.parcelinbox.app.data.ParcelItem
 import com.parcelinbox.app.data.ParcelStatus
 import com.parcelinbox.app.data.ParsedParcel
-import com.parcelinbox.app.settings.NotificationSource
+import com.parcelinbox.app.settings.ShoppingSource
 import com.parcelinbox.app.settings.AppLanguage
 import com.parcelinbox.app.settings.RetentionPolicy
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +19,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 data class SourceChoice(
-    val source: NotificationSource,
+    val source: ShoppingSource,
     val enabled: Boolean
 )
 
@@ -25,6 +30,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _hasNotificationAccess = MutableStateFlow(false)
     val hasNotificationAccess = _hasNotificationAccess.asStateFlow()
+
+    private val _hasScreenCaptureAccess = MutableStateFlow(false)
+    val hasScreenCaptureAccess = _hasScreenCaptureAccess.asStateFlow()
 
     private val _sources = MutableStateFlow(loadSources())
     val sources: StateFlow<List<SourceChoice>> = _sources.asStateFlow()
@@ -49,6 +57,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _hasNotificationAccess.value = NotificationManagerCompat
             .getEnabledListenerPackages(app)
             .contains(app.packageName)
+        _hasScreenCaptureAccess.value = isScreenCaptureServiceEnabled()
         app.repository.refresh()
         _sources.value = loadSources()
         _retention.value = app.settings.retentionPolicy
@@ -91,6 +100,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _hasCompletedPermissionIntro.value = true
     }
 
+    fun acceptScreenCaptureDisclosure() {
+        app.settings.hasAcceptedScreenCaptureDisclosure = true
+    }
+
     fun addDemoData() {
         val now = System.currentTimeMillis()
         listOf(
@@ -101,7 +114,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 trackingNumber = "DEMO10000001",
                 pickupCode = "3-2-1056",
                 status = ParcelStatus.READY_FOR_PICKUP,
-                observedAt = now
+                observedAt = now,
+                captureMethod = CaptureMethod.DEMO
             ),
             ParsedParcel(
                 sourcePackage = "demo.jd",
@@ -110,7 +124,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 trackingNumber = "DEMO10000002",
                 pickupCode = null,
                 status = ParcelStatus.OUT_FOR_DELIVERY,
-                observedAt = now - 45L * 60L * 1000L
+                observedAt = now - 45L * 60L * 1000L,
+                captureMethod = CaptureMethod.DEMO
             ),
             ParsedParcel(
                 sourcePackage = "demo.taobao",
@@ -119,12 +134,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 trackingNumber = "DEMO10000003",
                 pickupCode = null,
                 status = ParcelStatus.IN_TRANSIT,
-                observedAt = now - 3L * 60L * 60L * 1000L
+                observedAt = now - 3L * 60L * 60L * 1000L,
+                captureMethod = CaptureMethod.DEMO
             )
         ).forEach(app.repository::accept)
     }
 
     private fun loadSources(): List<SourceChoice> = app.settings.availableSources.map {
         SourceChoice(it, app.settings.isSourceEnabled(it.packageName))
+    }
+
+    private fun isScreenCaptureServiceEnabled(): Boolean {
+        val manager = app.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
+        return manager.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
+            .any { service ->
+                val info = service.resolveInfo.serviceInfo
+                info.packageName == app.packageName && info.name == ParcelAccessibilityService::class.java.name
+            }
     }
 }

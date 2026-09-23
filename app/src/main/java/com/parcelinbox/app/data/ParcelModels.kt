@@ -11,26 +11,36 @@ enum class ParcelStatus(val label: String) {
     EXCEPTION("异常")
 }
 
+enum class CaptureMethod {
+    SCREEN,
+    NOTIFICATION,
+    DEMO
+}
+
 data class ParcelItem(
     val id: Long,
     val sourcePackage: String,
     val sourceLabel: String,
     val title: String,
+    val orderReference: String?,
     val trackingNumber: String?,
     val pickupCode: String?,
     val status: ParcelStatus,
     val createdAt: Long,
     val updatedAt: Long,
     val completedAt: Long?,
-    val archived: Boolean
+    val archived: Boolean,
+    val captureMethod: CaptureMethod
 )
 
 data class ParsedParcel(
     val sourcePackage: String,
     val sourceLabel: String,
     val title: String,
+    val orderReference: String? = null,
     val trackingNumber: String?,
     val pickupCode: String?,
     val status: ParcelStatus,
-    val observedAt: Long
+    val observedAt: Long,
+    val captureMethod: CaptureMethod = CaptureMethod.NOTIFICATION
 )

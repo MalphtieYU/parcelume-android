@@ -3,7 +3,7 @@ package com.parcelinbox.app.settings
 import android.content.Context
 import androidx.core.content.edit
 
-data class NotificationSource(
+data class ShoppingSource(
     val packageName: String,
     val label: String
 )
@@ -24,12 +24,12 @@ class LocalSettings(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     val availableSources = listOf(
-        NotificationSource("com.taobao.taobao", "淘宝"),
-        NotificationSource("com.jingdong.app.mall", "京东"),
-        NotificationSource("com.xunmeng.pinduoduo", "拼多多"),
-        NotificationSource("com.cainiao.wireless", "菜鸟"),
-        NotificationSource("com.sf.activity", "顺丰"),
-        NotificationSource("com.amazon.mShop.android.shopping", "Amazon")
+        ShoppingSource("com.taobao.taobao", "淘宝"),
+        ShoppingSource("com.jingdong.app.mall", "京东"),
+        ShoppingSource("com.xunmeng.pinduoduo", "拼多多"),
+        ShoppingSource("com.cainiao.wireless", "菜鸟"),
+        ShoppingSource("com.sf.activity", "顺丰"),
+        ShoppingSource("com.amazon.mShop.android.shopping", "Amazon")
     )
 
     fun isSourceEnabled(packageName: String): Boolean =
@@ -74,11 +74,18 @@ class LocalSettings(context: Context) {
             preferences.edit { putBoolean(KEY_PERMISSION_INTRO_COMPLETE, value) }
         }
 
+    var hasAcceptedScreenCaptureDisclosure: Boolean
+        get() = preferences.getBoolean(KEY_SCREEN_CAPTURE_DISCLOSURE, false)
+        set(value) {
+            preferences.edit { putBoolean(KEY_SCREEN_CAPTURE_DISCLOSURE, value) }
+        }
+
     private companion object {
         const val PREFERENCES_NAME = "local_settings"
         const val KEY_RETENTION = "retention_policy"
         const val KEY_LANGUAGE = "app_language"
         const val KEY_ONBOARDING_COMPLETE = "onboarding_complete"
         const val KEY_PERMISSION_INTRO_COMPLETE = "permission_intro_complete"
+        const val KEY_SCREEN_CAPTURE_DISCLOSURE = "screen_capture_disclosure_v1"
     }
 }

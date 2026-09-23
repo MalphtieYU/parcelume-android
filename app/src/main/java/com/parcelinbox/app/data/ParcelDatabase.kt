@@ -19,21 +19,30 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                 source_package TEXT NOT NULL,
                 source_label TEXT NOT NULL,
                 title TEXT NOT NULL,
+                order_reference TEXT,
                 tracking_number TEXT,
                 pickup_code TEXT,
                 status TEXT NOT NULL,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 completed_at INTEGER,
-                archived INTEGER NOT NULL DEFAULT 0
+                archived INTEGER NOT NULL DEFAULT 0,
+                capture_method TEXT NOT NULL DEFAULT 'NOTIFICATION'
             )
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX idx_parcels_tracking ON parcels(tracking_number)")
+        db.execSQL("CREATE INDEX idx_parcels_order_reference ON parcels(order_reference)")
         db.execSQL("CREATE INDEX idx_parcels_updated ON parcels(updated_at DESC)")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE parcels ADD COLUMN order_reference TEXT")
+            db.execSQL("ALTER TABLE parcels ADD COLUMN capture_method TEXT NOT NULL DEFAULT 'NOTIFICATION'")
+            db.execSQL("CREATE INDEX idx_parcels_order_reference ON parcels(order_reference)")
+        }
+    }
 
     @Synchronized
     fun upsert(parsed: ParsedParcel): Long {
@@ -44,10 +53,12 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
             put("source_package", parsed.sourcePackage)
             put("source_label", parsed.sourceLabel)
             put("title", parsed.title)
+            parsed.orderReference?.let { put("order_reference", it) }
             parsed.trackingNumber?.let { put("tracking_number", it) }
             parsed.pickupCode?.let { put("pickup_code", it) }
             put("status", parsed.status.name)
             put("updated_at", parsed.observedAt)
+            put("capture_method", parsed.captureMethod.name)
             if (completedAt != null) put("completed_at", completedAt)
         }
 
@@ -67,6 +78,21 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                 arrayOf("id"),
                 "tracking_number = ?",
                 arrayOf(parsed.trackingNumber),
+                null,
+                null,
+                "updated_at DESC",
+                "1"
+            ).use { cursor ->
+                if (cursor.moveToFirst()) return cursor.getLong(0)
+            }
+        }
+
+        if (!parsed.orderReference.isNullOrBlank()) {
+            db.query(
+                "parcels",
+                arrayOf("id"),
+                "source_package = ? AND order_reference = ?",
+                arrayOf(parsed.sourcePackage, parsed.orderReference),
                 null,
                 null,
                 "updated_at DESC",
@@ -111,13 +137,17 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                             sourcePackage = cursor.getString(cursor.getColumnIndexOrThrow("source_package")),
                             sourceLabel = cursor.getString(cursor.getColumnIndexOrThrow("source_label")),
                             title = cursor.getString(cursor.getColumnIndexOrThrow("title")),
+                            orderReference = cursor.getString(cursor.getColumnIndexOrThrow("order_reference")),
                             trackingNumber = cursor.getString(cursor.getColumnIndexOrThrow("tracking_number")),
                             pickupCode = cursor.getString(cursor.getColumnIndexOrThrow("pickup_code")),
                             status = ParcelStatus.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("status"))),
                             createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
                             updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow("updated_at")),
                             completedAt = cursor.getNullableLong("completed_at"),
-                            archived = cursor.getInt(cursor.getColumnIndexOrThrow("archived")) == 1
+                            archived = cursor.getInt(cursor.getColumnIndexOrThrow("archived")) == 1,
+                            captureMethod = runCatching {
+                                CaptureMethod.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("capture_method")))
+                            }.getOrDefault(CaptureMethod.NOTIFICATION)
                         )
                     )
                 }
@@ -154,6 +184,6 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
 
     private companion object {
         const val DATABASE_NAME = "parcel_inbox.db"
-        const val DATABASE_VERSION = 1
+        const val DATABASE_VERSION = 2
     }
 }

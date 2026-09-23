@@ -21,7 +21,8 @@ class MainActivity : ComponentActivity() {
             ParcelInboxTheme {
                 ParcelInboxApp(
                     viewModel = screenModel,
-                    onOpenNotificationSettings = ::openSystemNotificationAccess
+                    onOpenNotificationSettings = ::openSystemNotificationAccess,
+                    onOpenScreenCaptureSettings = ::openSystemAccessibilitySettings
                 )
             }
         }
@@ -48,6 +49,18 @@ class MainActivity : ComponentActivity() {
             add(Intent(Settings.ACTION_SETTINGS))
         }
 
+        for (intent in candidates) {
+            if (intent.resolveActivity(packageManager) == null) continue
+            if (runCatching { startActivity(intent) }.isSuccess) return
+        }
+    }
+
+    /** Opens Android's own accessibility-services screen; Parcelume cannot grant this access. */
+    private fun openSystemAccessibilitySettings() {
+        val candidates = listOf(
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS)
+        )
         for (intent in candidates) {
             if (intent.resolveActivity(packageManager) == null) continue
             if (runCatching { startActivity(intent) }.isSuccess) return

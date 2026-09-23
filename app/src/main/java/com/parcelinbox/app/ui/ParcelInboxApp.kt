@@ -46,6 +46,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -86,6 +87,7 @@ import androidx.compose.ui.unit.sp
 import com.parcelinbox.app.MainViewModel
 import com.parcelinbox.app.R
 import com.parcelinbox.app.SourceChoice
+import com.parcelinbox.app.data.CaptureMethod
 import com.parcelinbox.app.data.ParcelItem
 import com.parcelinbox.app.data.ParcelStatus
 import com.parcelinbox.app.settings.AppLanguage
@@ -121,11 +123,13 @@ private fun tr(chinese: String, english: String): String =
 @Composable
 fun ParcelInboxApp(
     viewModel: MainViewModel,
-    onOpenNotificationSettings: () -> Unit
+    onOpenNotificationSettings: () -> Unit,
+    onOpenScreenCaptureSettings: () -> Unit
 ) {
     val onboardingComplete by viewModel.hasCompletedOnboarding.collectAsState()
     val permissionIntroComplete by viewModel.hasCompletedPermissionIntro.collectAsState()
     val hasNotificationAccess by viewModel.hasNotificationAccess.collectAsState()
+    val hasScreenCaptureAccess by viewModel.hasScreenCaptureAccess.collectAsState()
     val sources by viewModel.sources.collectAsState()
     val language by viewModel.language.collectAsState()
     var showLaunchScreen by remember { mutableStateOf(true) }
@@ -145,15 +149,19 @@ fun ParcelInboxApp(
                 launching -> LaunchScreen()
                 !onboardingComplete -> WelcomeScreen(onStart = viewModel::completeOnboarding)
                 !permissionIntroComplete -> PermissionSetupScreen(
+                    hasScreenCaptureAccess = hasScreenCaptureAccess,
                     hasNotificationAccess = hasNotificationAccess,
                     sources = sources,
                     onToggleSource = viewModel::setSourceEnabled,
+                    onAcceptScreenCaptureDisclosure = viewModel::acceptScreenCaptureDisclosure,
+                    onOpenScreenCaptureSettings = onOpenScreenCaptureSettings,
                     onOpenNotificationSettings = onOpenNotificationSettings,
                     onContinue = viewModel::completePermissionIntro
                 )
                 else -> MainShell(
                     viewModel = viewModel,
-                    onOpenNotificationSettings = onOpenNotificationSettings
+                    onOpenNotificationSettings = onOpenNotificationSettings,
+                    onOpenScreenCaptureSettings = onOpenScreenCaptureSettings
                 )
             }
         }
@@ -391,8 +399,8 @@ private fun WelcomeScreen(onStart: () -> Unit) {
                 )
                 Text(
                     tr(
-                        "在本机自动整理物流通知，到了就提醒。",
-                        "Organized privately on your phone, with reminders when parcels arrive."
+                        "浏览订单时本地识别，通知作为补充，包裹集中看清。",
+                        "Capture visible orders locally, use notifications as backup, and keep every parcel in view."
                     ),
                     color = Muted,
                     fontSize = 14.sp
@@ -413,14 +421,18 @@ private fun WelcomeScreen(onStart: () -> Unit) {
 
 @Composable
 private fun PermissionSetupScreen(
+    hasScreenCaptureAccess: Boolean,
     hasNotificationAccess: Boolean,
     sources: List<SourceChoice>,
     onToggleSource: (String, Boolean) -> Unit,
+    onAcceptScreenCaptureDisclosure: () -> Unit,
+    onOpenScreenCaptureSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onContinue: () -> Unit
 ) {
     val selectedCount = sources.count { it.enabled }
-    val ready = hasNotificationAccess && selectedCount > 0
+    val ready = hasScreenCaptureAccess && selectedCount > 0
+    var disclosureAccepted by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding(),
@@ -429,7 +441,7 @@ private fun PermissionSetupScreen(
     ) {
         item {
             Text(
-                tr("先确认权限\n再自动整理", "Permission first,\nthen auto-sort"),
+                tr("看见订单\n自动整理", "See an order,\nauto-sort it"),
                 fontSize = 35.sp,
                 lineHeight = 38.sp,
                 fontWeight = FontWeight.Black,
@@ -450,16 +462,16 @@ private fun PermissionSetupScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            if (ready) tr("准备完成", "You're all set") else tr("当前为仅浏览模式", "Browse-only for now"),
+                            if (ready) tr("页面识别已准备", "Screen capture is ready") else tr("当前为仅浏览模式", "Browse-only for now"),
                             fontSize = 23.sp,
                             lineHeight = 27.sp,
                             fontWeight = FontWeight.Black
                         )
                         Text(
-                            if (hasNotificationAccess) {
-                                tr("通知访问已开启 · 已选择 $selectedCount 个来源", "Notification access on · $selectedCount sources selected")
+                            if (hasScreenCaptureAccess) {
+                                tr("已选择 $selectedCount 个平台 · 使用时本地识别", "$selectedCount platforms · local capture while in use")
                             } else {
-                                tr("未授权时不会自动识别新包裹", "New parcels cannot be detected without access")
+                                tr("未授权时不会读取其他应用页面", "Other app screens are never read without access")
                             },
                             color = Muted,
                             fontSize = 12.sp,
@@ -478,35 +490,35 @@ private fun PermissionSetupScreen(
             SettingsSection(title = tr("Parcelume 会读取什么", "What Parcelume reads")) {
                 PrivacyPoint(
                     number = "1",
-                    title = tr("仅限你选择的平台通知", "Only selected app notifications"),
+                    title = tr("仅识别所选平台的当前页面", "Only selected apps currently on screen"),
                     body = tr(
-                        "Android 的通知访问授权范围较宽，但 Parcelume 会直接忽略未选择应用的通知。",
-                        "Android grants broad notification access, but Parcelume immediately ignores apps you did not select."
+                        "当你正在查看所选购物或物流应用时，读取屏幕上已经显示的文字；其他应用会被直接忽略。",
+                        "While you use a selected shopping or delivery app, Parcelume reads text already visible on screen and immediately ignores other apps."
                     )
                 )
                 PrivacyPoint(
                     number = "2",
-                    title = tr("只提取必要物流字段", "Only essential delivery fields"),
+                    title = tr("不替你操作，也不保存原页面", "No control and no raw-screen storage"),
                     body = tr(
-                        "从通知标题和正文提取来源、状态、运单号、取件码和更新时间；能否识别商品名称取决于通知是否包含。",
-                        "It extracts source, status, tracking number, pickup code and update time. Item names appear only when the notification includes them."
+                        "不会点击、滚动、输入或截屏；只保存识别出的商品标题、订单号、运单号、状态和时间。",
+                        "It never clicks, scrolls, types, or takes screenshots. Only extracted item, order, tracking, status, and time fields are stored."
                     )
                 )
                 PrivacyPoint(
                     number = "3",
-                    title = tr("完全本地，不上传", "Local only, never uploaded"),
+                    title = tr("当前版本仍完全本地", "This version remains local-only"),
                     body = tr(
-                        "不申请联网权限，不读取购物历史、照片、联系人或短信；原始通知不会写入数据库。",
-                        "No internet permission, shopping history, photos, contacts or messages. Raw notification text is never stored."
+                        "不申请联网权限，不读取购物账号、照片、联系人或短信；实时快递联网查询尚未启用。",
+                        "No internet permission and no access to shopping credentials, photos, contacts, or messages. Live carrier lookup is not enabled yet."
                     )
                 )
             }
         }
 
         item {
-            SettingsSection(title = tr("选择通知来源", "Choose notification sources")) {
+            SettingsSection(title = tr("选择识别平台", "Choose capture sources")) {
                 Text(
-                    tr("只开启你希望 Parcelume 处理的平台，可随时在设置中修改。", "Select only the platforms you want processed. You can change this anytime."),
+                    tr("只选择你希望 Parcelume 在前台识别的平台，可随时在设置中修改。", "Select only the apps Parcelume may read while they are in the foreground. You can change this anytime."),
                     color = Muted,
                     fontSize = 12.sp,
                     lineHeight = 17.sp
@@ -534,13 +546,49 @@ private fun PermissionSetupScreen(
             }
         }
 
+        if (!hasScreenCaptureAccess) {
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth().clickable { disclosureAccepted = !disclosureAccepted },
+                    shape = RoundedCornerShape(22.dp),
+                    color = Color(0xFFF7F4F2)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = disclosureAccepted,
+                            onCheckedChange = { disclosureAccepted = it }
+                        )
+                        Text(
+                            tr(
+                                "我理解这是一项敏感的系统辅助功能权限，并同意 Parcelume 仅按上述范围处理所选应用的可见文字。",
+                                "I understand this is sensitive system accessibility access and agree that Parcelume may process visible text from selected apps only as described above."
+                            ),
+                            modifier = Modifier.weight(1f).padding(top = 9.dp),
+                            color = Ink,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Button(
                     onClick = {
-                        if (ready) onContinue() else onOpenNotificationSettings()
+                        if (ready) {
+                            onContinue()
+                        } else {
+                            onAcceptScreenCaptureDisclosure()
+                            onOpenScreenCaptureSettings()
+                        }
                     },
-                    enabled = ready || !hasNotificationAccess,
+                    enabled = ready || (selectedCount > 0 && disclosureAccepted),
                     modifier = Modifier.fillMaxWidth().height(58.dp),
                     shape = RoundedCornerShape(30.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Ink)
@@ -548,18 +596,20 @@ private fun PermissionSetupScreen(
                     Text(
                         when {
                             ready -> tr("完成设置，进入 Parcelume", "Finish setup")
-                            !hasNotificationAccess -> tr("开启通知访问", "Enable notification access")
+                            selectedCount == 0 -> tr("请先选择一个平台", "Select at least one app")
+                            !disclosureAccepted -> tr("请先阅读并同意", "Review and agree first")
+                            !hasScreenCaptureAccess -> tr("开启购物页面识别", "Enable shopping screen capture")
                             else -> tr("请先选择一个来源", "Select at least one source")
                         },
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-                if (!hasNotificationAccess) {
+                if (!hasScreenCaptureAccess) {
                     Text(
                         tr(
-                            "点击后将打开手机的系统通知访问页面；权限只能由你在系统界面亲自开启。",
-                            "This opens your phone's system notification-access page. Only you can grant access there."
+                            "点击后将打开 Android 系统辅助功能页面；权限只能由你亲自在系统界面开启。",
+                            "This opens Android's system accessibility page. Only you can grant access there."
                         ),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                         color = Muted,
@@ -567,6 +617,15 @@ private fun PermissionSetupScreen(
                         lineHeight = 16.sp,
                         textAlign = TextAlign.Center
                     )
+                }
+                if (!hasNotificationAccess) {
+                    TextButton(onClick = onOpenNotificationSettings, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            tr("可选：开启通知辅助识别", "Optional: enable notification backup"),
+                            color = Ink,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
                 TextButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
                     Text(
@@ -602,10 +661,12 @@ private fun PrivacyPoint(number: String, title: String, body: String) {
 @Composable
 private fun MainShell(
     viewModel: MainViewModel,
-    onOpenNotificationSettings: () -> Unit
+    onOpenNotificationSettings: () -> Unit,
+    onOpenScreenCaptureSettings: () -> Unit
 ) {
     val parcels by viewModel.parcels.collectAsState()
     val hasAccess by viewModel.hasNotificationAccess.collectAsState()
+    val hasScreenCaptureAccess by viewModel.hasScreenCaptureAccess.collectAsState()
     val sources by viewModel.sources.collectAsState()
     val retention by viewModel.retention.collectAsState()
     var destination by remember { mutableStateOf(Destination.HOME) }
@@ -635,8 +696,13 @@ private fun MainShell(
             when (activeDestination) {
                 Destination.HOME -> HomeScreen(
                     parcels = parcels,
+                    hasScreenCaptureAccess = hasScreenCaptureAccess,
                     hasNotificationAccess = hasAccess,
                     hasEnabledSource = sources.any { it.enabled },
+                    onOpenScreenCaptureSettings = {
+                        viewModel.acceptScreenCaptureDisclosure()
+                        onOpenScreenCaptureSettings()
+                    },
                     onOpenNotificationSettings = onOpenNotificationSettings,
                     onOpenSettings = { destination = Destination.SETTINGS },
                     onOpenAll = { destination = Destination.PARCELS },
@@ -653,11 +719,14 @@ private fun MainShell(
                     onSelectParcel = { selectedParcel = it }
                 )
                 Destination.SETTINGS -> SettingsScreen(
+                    hasScreenCaptureAccess = hasScreenCaptureAccess,
                     hasNotificationAccess = hasAccess,
                     sources = sources,
                     retention = retention,
                     language = LocalAppLanguage.current,
+                    onOpenScreenCaptureSettings = onOpenScreenCaptureSettings,
                     onOpenNotificationSettings = onOpenNotificationSettings,
+                    onAcceptScreenCaptureDisclosure = viewModel::acceptScreenCaptureDisclosure,
                     onToggleSource = viewModel::setSourceEnabled,
                     onSetRetention = viewModel::setRetention,
                     onSetLanguage = viewModel::setLanguage,
@@ -730,8 +799,10 @@ private fun AppNavigationBar(selected: Destination, onSelect: (Destination) -> U
 @Composable
 private fun HomeScreen(
     parcels: List<ParcelItem>,
+    hasScreenCaptureAccess: Boolean,
     hasNotificationAccess: Boolean,
     hasEnabledSource: Boolean,
+    onOpenScreenCaptureSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenAll: () -> Unit,
@@ -743,6 +814,7 @@ private fun HomeScreen(
         parcel.matches(filter) && (query.isBlank() || listOfNotNull(
             parcel.title,
             parcel.sourceLabel,
+            parcel.orderReference,
             parcel.trackingNumber,
             parcel.pickupCode
         ).any { it.contains(query, ignoreCase = true) })
@@ -780,11 +852,17 @@ private fun HomeScreen(
             }
         }
 
-        if (!hasNotificationAccess || !hasEnabledSource) {
+        if (!hasScreenCaptureAccess || !hasEnabledSource) {
             item {
                 PermissionBanner(
+                    hasScreenCaptureAccess = hasScreenCaptureAccess,
                     hasNotificationAccess = hasNotificationAccess,
-                    onClick = if (hasNotificationAccess) onOpenSettings else onOpenNotificationSettings
+                    hasEnabledSource = hasEnabledSource,
+                    onClick = when {
+                        !hasEnabledSource -> onOpenSettings
+                        !hasScreenCaptureAccess -> onOpenScreenCaptureSettings
+                        else -> onOpenNotificationSettings
+                    }
                 )
             }
         }
@@ -831,7 +909,12 @@ private fun HomeScreen(
 }
 
 @Composable
-private fun PermissionBanner(hasNotificationAccess: Boolean, onClick: () -> Unit) {
+private fun PermissionBanner(
+    hasScreenCaptureAccess: Boolean,
+    hasNotificationAccess: Boolean,
+    hasEnabledSource: Boolean,
+    onClick: () -> Unit
+) {
     Surface(
         modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
         shape = RoundedCornerShape(22.dp),
@@ -844,15 +927,18 @@ private fun PermissionBanner(hasNotificationAccess: Boolean, onClick: () -> Unit
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (hasNotificationAccess) tr("尚未选择通知来源", "No notification sources selected")
-                    else tr("当前为仅浏览模式", "Browse-only mode"),
+                    when {
+                        !hasEnabledSource -> tr("尚未选择识别平台", "No capture sources selected")
+                        !hasScreenCaptureAccess && hasNotificationAccess -> tr("当前仅依赖通知", "Notification-only mode")
+                        else -> tr("当前为仅浏览模式", "Browse-only mode")
+                    },
                     fontWeight = FontWeight.Black
                 )
                 Text(
-                    if (hasNotificationAccess) {
-                        tr("去设置选择需要识别的平台", "Choose the platforms you want to detect")
-                    } else {
-                        tr("开启通知访问后才能自动整理包裹", "Enable notification access to detect parcels")
+                    when {
+                        !hasEnabledSource -> tr("去设置选择需要识别的平台", "Choose the platforms you want to capture")
+                        !hasScreenCaptureAccess -> tr("开启购物页面识别，减少对通知的依赖", "Enable shopping screen capture to reduce notification dependence")
+                        else -> tr("可选开启通知作为辅助来源", "Optionally use notifications as a backup source")
                     },
                     color = Muted,
                     fontSize = 12.sp
@@ -1109,7 +1195,7 @@ private fun CollectionEmptyState(isPickup: Boolean) {
                     fontWeight = FontWeight.Black
                 )
                 Text(
-                    tr("收到相关通知后会自动出现", "Matching notifications will appear automatically"),
+                    tr("识别到订单页面或相关通知后会自动出现", "Captured order screens or matching notifications appear automatically"),
                     color = Muted,
                     fontSize = 13.sp
                 )
@@ -1131,8 +1217,8 @@ private fun CompactEmptyState() {
     ) {
         Text(
             tr(
-                "收到购物或物流通知后，包裹会自动出现在这里。",
-                "Parcels will appear here when shopping or delivery notifications arrive."
+                "浏览所选平台的订单或物流页面后，识别出的包裹会出现在这里；通知也可作为补充。",
+                "Captured order or delivery pages from selected apps appear here; notifications can also provide backup."
             ),
             modifier = Modifier.padding(20.dp),
             color = Muted,
@@ -1143,11 +1229,14 @@ private fun CompactEmptyState() {
 
 @Composable
 private fun SettingsScreen(
+    hasScreenCaptureAccess: Boolean,
     hasNotificationAccess: Boolean,
     sources: List<SourceChoice>,
     retention: RetentionPolicy,
     language: AppLanguage,
+    onOpenScreenCaptureSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
+    onAcceptScreenCaptureDisclosure: () -> Unit,
     onToggleSource: (String, Boolean) -> Unit,
     onSetRetention: (RetentionPolicy) -> Unit,
     onSetLanguage: (AppLanguage) -> Unit,
@@ -1156,6 +1245,7 @@ private fun SettingsScreen(
     onShowOnboarding: () -> Unit
 ) {
     var confirmDelete by remember { mutableStateOf(false) }
+    var confirmScreenCapture by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
@@ -1185,13 +1275,26 @@ private fun SettingsScreen(
             }
         }
         item {
-            SettingsSection(title = tr("自动整理", "Auto sorting")) {
+            SettingsSection(title = tr("自动识别", "Automatic capture")) {
                 SettingActionRow(
-                    title = tr("通知访问", "Notification access"),
-                    subtitle = if (hasNotificationAccess) {
-                        tr("已开启，只处理选中的来源", "On — selected sources only")
+                    title = tr("购物页面识别", "Shopping screen capture"),
+                    subtitle = if (hasScreenCaptureAccess) {
+                        tr("已开启 · 只读取所选应用的当前可见文字", "On · visible text from selected apps only")
                     } else {
-                        tr("尚未开启", "Not enabled")
+                        tr("主要来源 · 需要敏感的系统辅助功能权限", "Primary source · requires sensitive accessibility access")
+                    },
+                    action = if (hasScreenCaptureAccess) tr("系统设置", "Settings") else tr("了解并开启", "Review"),
+                    onClick = {
+                        if (hasScreenCaptureAccess) onOpenScreenCaptureSettings() else confirmScreenCapture = true
+                    }
+                )
+                HorizontalDivider(color = Color(0xFFF0EDF1))
+                SettingActionRow(
+                    title = tr("通知辅助识别", "Notification backup"),
+                    subtitle = if (hasNotificationAccess) {
+                        tr("已开启 · 只处理选中的来源", "On · selected sources only")
+                    } else {
+                        tr("可选，不再是自动识别的唯一来源", "Optional · no longer the only automatic source")
                     },
                     action = if (hasNotificationAccess) tr("已开启", "Enabled") else tr("去开启", "Open"),
                     onClick = onOpenNotificationSettings
@@ -1239,8 +1342,8 @@ private fun SettingsScreen(
         item {
             Text(
                 tr(
-                    "Parcelume 不申请网络权限。原始通知只在本机内存中解析，不写入数据库。",
-                    "Parcelume has no network permission. Raw notifications are parsed in memory and are never stored."
+                    "Parcelume 0.2 仍不申请网络权限。页面与通知原文只在内存中解析，不写入数据库；当前尚不提供实时联网物流查询。",
+                    "Parcelume 0.2 still has no network permission. Raw screen and notification text is parsed in memory and never stored; live carrier lookup is not available yet."
                 ),
                 color = Muted,
                 fontSize = 12.sp,
@@ -1248,6 +1351,33 @@ private fun SettingsScreen(
                 modifier = Modifier.padding(horizontal = 4.dp)
             )
         }
+    }
+
+    if (confirmScreenCapture) {
+        AlertDialog(
+            onDismissRequest = { confirmScreenCapture = false },
+            title = { Text(tr("开启购物页面识别？", "Enable shopping screen capture?"), fontWeight = FontWeight.Black) },
+            text = {
+                Text(
+                    tr(
+                        "Android 会显示范围较广的辅助功能警告。Parcelume 实际只在你选择的购物与物流应用位于前台时读取可见文字，用来提取商品标题、订单号、运单号和状态；不会点击、滚动、输入、截屏或保存原始页面。",
+                        "Android shows a broad accessibility warning. Parcelume actually reads visible text only while a selected shopping or delivery app is in the foreground, to extract item, order, tracking, and status fields. It never clicks, scrolls, types, takes screenshots, or stores the original screen."
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    onAcceptScreenCaptureDisclosure()
+                    confirmScreenCapture = false
+                    onOpenScreenCaptureSettings()
+                }) { Text(tr("理解并打开系统设置", "Agree and open settings"), color = Ink) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmScreenCapture = false }) {
+                    Text(tr("取消", "Cancel"), color = Muted)
+                }
+            }
+        )
     }
 
     if (confirmDelete) {
@@ -1343,8 +1473,18 @@ private fun ParcelDetailDialog(
                 }
                 Text(tr("来源：${localizedSourceLabel(parcel.sourcePackage, parcel.sourceLabel)}", "Source: ${localizedSourceLabel(parcel.sourcePackage, parcel.sourceLabel)}"))
                 Text(tr("状态：${parcel.status.localizedLabel()}", "Status: ${parcel.status.localizedLabel()}"))
+                parcel.orderReference?.let { Text(tr("订单号：$it", "Order: $it")) }
                 parcel.trackingNumber?.let { Text(tr("运单号：$it", "Tracking: $it")) }
                 parcel.pickupCode?.let { Text(tr("取件码：$it", "Pickup code: $it"), fontWeight = FontWeight.Black) }
+                Text(
+                    when (parcel.captureMethod) {
+                        CaptureMethod.SCREEN -> tr("识别方式：购物页面", "Captured from: shopping screen")
+                        CaptureMethod.NOTIFICATION -> tr("识别方式：通知辅助", "Captured from: notification backup")
+                        CaptureMethod.DEMO -> tr("识别方式：演示数据", "Captured from: demo data")
+                    },
+                    color = Muted,
+                    fontSize = 12.sp
+                )
                 Text(
                     tr("更新于 ${parcel.localizedDate()}", "Updated ${parcel.localizedDate()}"),
                     color = Muted,
