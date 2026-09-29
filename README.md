@@ -47,7 +47,7 @@ Parcelume may extract the source, optional item title, order reference, delivery
 
 ## Download the preview
 
-Download [`parcelume-0.3.0-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.0-preview) from the 0.3.0 preview release. This is a debug-signed evaluation build, not a production Play Store build; review the limitations below before granting system access.
+Download [`parcelume-0.3.3-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.3-preview) from the 0.3.3 preview release. This is a debug-signed evaluation build, not a production Play Store build; review the limitations below before granting system access. SHA-256: `6D41CB828088A0308FB1F5F859482F9C870A2627787AB7B08C3AF2315753D7AE`.
 
 ## Quick start
 
@@ -92,7 +92,7 @@ See [Privacy details](docs/PRIVACY.md) for the exact boundary.
 
 ## Supported sources
 
-Version 0.3 includes package-scoped support for 19 apps: Taobao, JD, Pinduoduo, Tmall, Cainiao, SF Express, Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba.
+Version 0.3.3 pauses platform expansion and maintains independent parsing rules for Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express. It also separates multiple order cards found in one accessibility container and ignores clipped cards that expose an identifier without a status or tracking signal. Food/instant-delivery and refund, cancellation, or after-sales pages are explicitly excluded. Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba remain selectable but experimental.
 
 Support means Parcelume recognizes known visible-page and notification patterns; it does not integrate with or represent these companies. Layout, wording, custom-rendered views, region, and app-version changes can reduce recognition accuracy.
 
@@ -126,7 +126,7 @@ Run verification:
 
 ## Project status
 
-Current MVP validation includes Android 15 emulator UI and real accessibility-permission flow checks, screen and notification parser unit tests, Android Lint, database migration coverage through installation testing, and manifest verification confirming no network permission. Real shopping-app pages and devices from different Android vendors are still needed before a stable release.
+Version 0.3.3 adds on-device compatibility guidance for Xiaomi/Redmi, Huawei, Honor, and Samsung plus a user-initiated privacy-safe report. The report contains only device, Android and shopping-app versions, parser version, page kind, result code, and counts—never order content. Fixtures and repeated emulator checks do not replace live-page validation; real Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express pages still need anonymized testing across app and Android-vendor versions.
 
 ## Contributing
 

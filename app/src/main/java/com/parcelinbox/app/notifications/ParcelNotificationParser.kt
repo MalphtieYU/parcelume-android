@@ -16,6 +16,11 @@ object ParcelNotificationParser {
         "payment password", "one-time password", "número de tarjeta", "número do cartão",
         "nomor kartu", "カード番号", "セキュリティコード"
     )
+    private val nonParcelWords = listOf(
+        "外卖订单", "京东外卖", "淘宝闪购", "闪购订单", "饿了么订单", "餐品", "骑手已接单",
+        "骑手正在配送", "即时配送订单", "小时达订单", "秒送订单", "退款成功", "已全额退款",
+        "交易关闭", "订单已取消", "取消成功", "售后详情", "退款详情", "退货退款", "退货物流"
+    )
     private val privateTitleWords = listOf(
         "收货人", "收件人", "地址", "手机号", "联系电话", "身份证", "支付方式", "付款方式",
         "银行卡", "信用卡", "密码", "验证码", "address", "phone", "recipient", "payment method",
@@ -26,7 +31,11 @@ object ParcelNotificationParser {
     private val emailLike = Regex("[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", RegexOption.IGNORE_CASE)
 
     private val labelledTrackingNumber = Regex(
-        "(?:运单号|快递单号|物流单号|单号|tracking\\s*(?:number|no\\.?|#)|n[uú]mero\\s+de\\s+seguimiento|c[oó]digo\\s+de\\s+rastreio|nomor\\s+resi|追跡番号)[：:\\s#]*([A-Z0-9][A-Z0-9-]{7,29})",
+        "(?:顺丰运单号|运单号|快递单号|物流单号|配送单号|包裹单号|母单号|子单号|快递单编号|运单编号|tracking\\s*(?:number|no\\.?|#)|n[uú]mero\\s+de\\s+seguimiento|c[oó]digo\\s+de\\s+rastreio|nomor\\s+resi|追跡番号)[：:\\s#-]*([A-Z0-9][A-Z0-9-]{7,31})",
+        setOf(RegexOption.IGNORE_CASE)
+    )
+    private val orderReference = Regex(
+        "(?:订单编号|订单号|京东订单号|拼单编号|主订单号|子订单号|交易号|order\\s*(?:number|no\\.?|#|id))[：:\\s#-]*([A-Z0-9][A-Z0-9-]{5,39})",
         setOf(RegexOption.IGNORE_CASE)
     )
     private val commonTrackingNumber = Regex("\\b[A-Z]{1,4}[0-9]{8,22}[A-Z0-9]?\\b")
@@ -46,23 +55,32 @@ object ParcelNotificationParser {
         val text = notificationText.orEmpty().trim()
         val combined = "$title\n$text".trim()
         if (blockedWords.any { combined.contains(it, ignoreCase = true) }) return null
+        if (nonParcelWords.any { combined.contains(it, ignoreCase = true) }) return null
         if (combined.isBlank() || relevantWords.none { combined.contains(it, ignoreCase = true) }) {
             return null
         }
 
         val status = detectStatus(combined)
+        val order = orderReference.find(combined)?.groupValues?.getOrNull(1)
         val tracking = labelledTrackingNumber.find(combined)?.groupValues?.getOrNull(1)
-            ?: commonTrackingNumber.find(combined)?.value
+            ?: commonTrackingNumber.findAll(combined).map { it.value }
+                .firstOrNull { !it.equals(order, ignoreCase = true) }
         val code = pickupCode.find(combined)?.groupValues?.getOrNull(1)
+        if (order == null && tracking == null && code == null) return null
 
         return ParsedParcel(
             sourcePackage = sourcePackage,
             sourceLabel = sourceLabel,
             title = displayTitle(title, text, sourceLabel),
+            orderReference = order,
             trackingNumber = tracking,
             pickupCode = code,
             status = status,
-            observedAt = observedAt
+            observedAt = observedAt,
+            confidence = ((if (order != null) 38 else 0) +
+                (if (tracking != null) 45 else 0) +
+                (if (code != null) 45 else 0) +
+                (if (status != ParcelStatus.PENDING) 10 else 0)).coerceAtMost(100)
         )
     }
 

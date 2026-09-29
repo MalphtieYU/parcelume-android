@@ -72,4 +72,28 @@ class ParcelNotificationParserTest {
 
         assertEquals("包裹已发货，运单号：SF1234567890", parsed?.title)
     }
+
+    @Test
+    fun `ignores food delivery notifications from a shopping platform`() {
+        val parsed = ParcelNotificationParser.parse(
+            sourcePackage = "com.jingdong.app.mall",
+            sourceLabel = "京东",
+            notificationTitle = "京东外卖",
+            notificationText = "外卖订单 JD202609270001 骑手正在配送"
+        )
+
+        assertNull(parsed)
+    }
+
+    @Test
+    fun `ignores refund and cancelled order notifications`() {
+        val parsed = ParcelNotificationParser.parse(
+            sourcePackage = "com.taobao.taobao",
+            sourceLabel = "淘宝",
+            notificationTitle = "退款成功",
+            notificationText = "订单号：TB202609270001 已全额退款"
+        )
+
+        assertNull(parsed)
+    }
 }

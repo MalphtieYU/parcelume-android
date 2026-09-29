@@ -1,20 +1,24 @@
 package com.parcelinbox.app.capture
 
 import android.accessibilityservice.AccessibilityService
+import android.os.Handler
+import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.parcelinbox.app.ParcelInboxApplication
-import java.util.ArrayDeque
+import com.parcelinbox.app.data.ParsedParcel
 import java.util.concurrent.Executors
 
 /**
  * Reads visible text only while a user-selected shopping app is in the
  * foreground. It never performs clicks, gestures, scrolling, or text input.
+ * Multiple delayed samples cover shopping pages that render asynchronously.
  */
 class ParcelAccessibilityService : AccessibilityService() {
     private val databaseExecutor = Executors.newSingleThreadExecutor()
-    private var lastFingerprint: String? = null
-    private var lastAcceptedAt = 0L
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val lastScheduledAt = HashMap<String, Long>()
+    private val recentFingerprints = LinkedHashMap<String, Long>()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val currentEvent = event ?: return
@@ -27,60 +31,117 @@ class ParcelAccessibilityService : AccessibilityService() {
         if (currentEvent.eventType !in CAPTURE_EVENTS) return
 
         val now = System.currentTimeMillis()
-        if (now - lastAcceptedAt < MIN_CAPTURE_INTERVAL_MS) return
+        val previousSchedule = lastScheduledAt[packageName] ?: 0L
+        if (now - previousSchedule < SCHEDULE_DEBOUNCE_MS) return
+        lastScheduledAt[packageName] = now
 
-        val root = rootInActiveWindow ?: currentEvent.source ?: return
-        if (root.packageName?.toString() != packageName) return
-        val visibleText = collectVisibleText(root)
-        val parsed = ParcelScreenParser.parse(
-            sourcePackage = packageName,
-            sourceLabel = application.settings.sourceLabel(packageName) ?: packageName,
-            visibleTexts = visibleText,
-            observedAt = now,
+        SAMPLE_DELAYS_MS.forEach { delay ->
+            mainHandler.postDelayed({ captureVisiblePage(packageName) }, delay)
+        }
+    }
+
+    private fun captureVisiblePage(expectedPackage: String) {
+        val application = applicationContext as ParcelInboxApplication
+        if (!application.settings.hasAcceptedScreenCaptureDisclosure || application.settings.capturePaused) return
+        if (!application.settings.isSourceEnabled(expectedPackage)) return
+
+        val root = rootInActiveWindow ?: return
+        if (root.packageName?.toString() != expectedPackage) return
+
+        val observedAt = System.currentTimeMillis()
+        val snapshot = collectVisibleSnapshot(root)
+        val sourceLabel = application.settings.sourceLabel(expectedPackage) ?: expectedPackage
+        val outcome = ParcelScreenParser.parseSnapshot(
+            sourcePackage = expectedPackage,
+            sourceLabel = sourceLabel,
+            snapshot = snapshot,
+            observedAt = observedAt,
             includeItemTitle = !application.settings.hideItemNames
-        ) ?: return
+        )
 
+        if (application.settings.diagnosticsEnabled) {
+            application.diagnostics.record(
+                application.diagnostics.create(
+                    observedAt = observedAt,
+                    sourcePackage = expectedPackage,
+                    sourceLabel = sourceLabel,
+                    code = outcome.diagnosticCode,
+                    pageKind = outcome.pageKind,
+                    visibleNodeCount = snapshot.visibleNodeCount,
+                    textNodeCount = outcome.textNodeCount,
+                    candidateCount = outcome.parcels.size
+                )
+            )
+        }
+
+        val fresh = outcome.parcels.filter(::isFreshObservation)
+        if (fresh.isEmpty()) return
+        databaseExecutor.execute { application.repository.acceptAll(fresh) }
+    }
+
+    private fun isFreshObservation(parcel: ParsedParcel): Boolean {
+        val now = System.currentTimeMillis()
+        recentFingerprints.entries.removeAll { now - it.value > DUPLICATE_WINDOW_MS }
         val fingerprint = listOf(
-            parsed.sourcePackage,
-            parsed.orderReference,
-            parsed.trackingNumber,
-            parsed.title,
-            parsed.status.name
+            parcel.sourcePackage,
+            parcel.orderReference,
+            parcel.trackingNumber,
+            parcel.pickupCode,
+            parcel.status.name
         ).joinToString("|")
-        if (fingerprint == lastFingerprint && now - lastAcceptedAt < DUPLICATE_WINDOW_MS) return
+        val previous = recentFingerprints[fingerprint]
+        if (previous != null && now - previous < DUPLICATE_WINDOW_MS) return false
+        recentFingerprints[fingerprint] = now
+        return true
+    }
 
-        lastFingerprint = fingerprint
-        lastAcceptedAt = now
-        databaseExecutor.execute { application.repository.accept(parsed) }
+    private fun collectVisibleSnapshot(root: AccessibilityNodeInfo): VisiblePageSnapshot {
+        var visited = 0
+        val candidateBlocks = ArrayList<List<String>>(MAX_BLOCKS)
+
+        fun visit(node: AccessibilityNodeInfo, depth: Int): List<String> {
+            if (visited >= MAX_NODES || depth > MAX_DEPTH || !node.isVisibleToUser) return emptyList()
+            visited += 1
+            val lines = ArrayList<String>(16)
+            if (!node.isPassword) {
+                node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(lines::add)
+                node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(lines::add)
+            }
+
+            for (index in 0 until node.childCount) {
+                if (visited >= MAX_NODES || lines.size >= MAX_RETURNED_LINES) break
+                node.getChild(index)?.let { child -> lines.addAll(visit(child, depth + 1)) }
+            }
+
+            // Repeated labels and identifiers are meaningful card boundaries.
+            // De-duplicating a parent subtree can collapse two split shipments
+            // into one flat block and let a later status leak into the first.
+            val normalized = lines.asSequence().map(String::trim).filter(String::isNotBlank)
+                .take(MAX_RETURNED_LINES).toList()
+            if (
+                depth > 0 && normalized.size in MIN_BLOCK_LINES..MAX_BLOCK_LINES &&
+                candidateBlocks.size < MAX_BLOCKS && normalized.any(CANDIDATE_ANCHOR::containsMatchIn)
+            ) {
+                candidateBlocks += normalized
+            }
+            return normalized
+        }
+
+        val fullText = visit(root, 0)
+        val blocks = candidateBlocks.asSequence()
+            .distinctBy { it.joinToString("\u001f") }
+            .sortedBy { it.size }
+            .take(MAX_BLOCKS)
+            .toList()
+        return VisiblePageSnapshot(fullText, blocks, visited)
     }
 
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        mainHandler.removeCallbacksAndMessages(null)
         databaseExecutor.shutdown()
         super.onDestroy()
-    }
-
-    private fun collectVisibleText(root: AccessibilityNodeInfo): List<String> {
-        val output = ArrayList<String>(64)
-        val queue = ArrayDeque<AccessibilityNodeInfo>()
-        queue.add(root)
-        var visited = 0
-
-        while (queue.isNotEmpty() && visited < MAX_NODES && output.size < MAX_TEXT_NODES) {
-            val node = queue.removeFirst()
-            visited += 1
-
-            if (node.isVisibleToUser && !node.isPassword) {
-                node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(output::add)
-                node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(output::add)
-            }
-
-            for (index in 0 until node.childCount) {
-                node.getChild(index)?.let(queue::addLast)
-            }
-        }
-        return output
     }
 
     private companion object {
@@ -89,9 +150,18 @@ class ParcelAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
             AccessibilityEvent.TYPE_VIEW_SCROLLED
         )
-        const val MIN_CAPTURE_INTERVAL_MS = 900L
-        const val DUPLICATE_WINDOW_MS = 15_000L
-        const val MAX_NODES = 600
-        const val MAX_TEXT_NODES = 240
+        val SAMPLE_DELAYS_MS = longArrayOf(180L, 750L, 1_600L)
+        val CANDIDATE_ANCHOR = Regex(
+            "(订单|运单|物流|快递|取件|包裹|待发货|已发货|运输|派送|签收|order|tracking|delivery)",
+            RegexOption.IGNORE_CASE
+        )
+        const val SCHEDULE_DEBOUNCE_MS = 450L
+        const val DUPLICATE_WINDOW_MS = 20_000L
+        const val MAX_NODES = 900
+        const val MAX_DEPTH = 28
+        const val MAX_RETURNED_LINES = 280
+        const val MIN_BLOCK_LINES = 2
+        const val MAX_BLOCK_LINES = 100
+        const val MAX_BLOCKS = 36
     }
 }

@@ -2,7 +2,7 @@
 
 [简体中文](PRIVACY.zh-CN.md) · English
 
-Parcelume 0.3 works without a Parcelume account or server. The current build remains offline-only.
+Parcelume 0.3.3 works without a Parcelume account or server. The current build remains offline-only.
 
 ## Shopping screen capture
 
@@ -33,6 +33,10 @@ A local record can include the selected source, optional item title, order refer
 Item titles, order references, tracking numbers, and pickup codes are encrypted with randomized AES-GCM using a non-exportable Android Keystore key. Separate keyed fingerprints allow exact local matching without retaining searchable plaintext. Existing 0.2 plaintext fields are encrypted during the version-3 database migration. Android backup and device-transfer rules exclude the database and local settings.
 
 Raw screen trees, notification bodies, screenshots, images, attachments, addresses, phone numbers, account passwords, payment details, and complete shopping histories are not intentionally stored.
+
+## Optional privacy-safe compatibility report
+
+Capture diagnostics are off by default. If the user enables them, Parcelume keeps only the latest diagnostic metadata on device: device model, Android version, shopping-app name and version, parser version, page kind, result code, and node/candidate counts. It contains no raw page text, item name, order or tracking number, pickup code, address, phone number, account, or payment data. Android's share sheet opens only after the user taps **Share privacy-safe report**, and the user chooses whether and where to send it.
 
 ## Network boundary
 

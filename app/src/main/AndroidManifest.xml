@@ -7,6 +7,17 @@
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
 
+    <!-- Limited package visibility is used only to add the selected core
+         shopping app's version to an opt-in, privacy-safe compatibility report. -->
+    <queries>
+        <package android:name="com.taobao.taobao" />
+        <package android:name="com.tmall.wireless" />
+        <package android:name="com.jingdong.app.mall" />
+        <package android:name="com.xunmeng.pinduoduo" />
+        <package android:name="com.cainiao.wireless" />
+        <package android:name="com.sf.activity" />
+    </queries>
+
     <application
         android:name=".ParcelInboxApplication"
         android:allowBackup="false"

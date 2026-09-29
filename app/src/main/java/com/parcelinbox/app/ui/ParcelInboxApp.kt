@@ -68,6 +68,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -89,6 +90,11 @@ import androidx.compose.ui.unit.sp
 import com.parcelinbox.app.MainViewModel
 import com.parcelinbox.app.R
 import com.parcelinbox.app.SourceChoice
+import com.parcelinbox.app.BuildConfig
+import com.parcelinbox.app.capture.AndroidVendorFamily
+import com.parcelinbox.app.capture.CaptureDiagnostic
+import com.parcelinbox.app.capture.CaptureDiagnosticCode
+import com.parcelinbox.app.capture.DeviceCompatibility
 import com.parcelinbox.app.data.CaptureMethod
 import com.parcelinbox.app.data.ParcelItem
 import com.parcelinbox.app.data.ParcelStatus
@@ -126,7 +132,8 @@ private fun tr(chinese: String, english: String): String =
 fun ParcelInboxApp(
     viewModel: MainViewModel,
     onOpenNotificationSettings: () -> Unit,
-    onOpenScreenCaptureSettings: () -> Unit
+    onOpenScreenCaptureSettings: () -> Unit,
+    onShareCompatibilityReport: (String) -> Unit
 ) {
     val onboardingComplete by viewModel.hasCompletedOnboarding.collectAsState()
     val permissionIntroComplete by viewModel.hasCompletedPermissionIntro.collectAsState()
@@ -165,7 +172,8 @@ fun ParcelInboxApp(
                 else -> MainShell(
                     viewModel = viewModel,
                     onOpenNotificationSettings = onOpenNotificationSettings,
-                    onOpenScreenCaptureSettings = onOpenScreenCaptureSettings
+                    onOpenScreenCaptureSettings = onOpenScreenCaptureSettings,
+                    onShareCompatibilityReport = onShareCompatibilityReport
                 )
             }
         }
@@ -174,7 +182,7 @@ fun ParcelInboxApp(
 
 @Composable
 private fun LaunchScreen() {
-    var phraseIndex by remember { mutableStateOf(0) }
+    var phraseIndex by remember { mutableIntStateOf(0) }
     var loadingStarted by remember { mutableStateOf(false) }
     val progress by animateFloatAsState(
         targetValue = if (loadingStarted) 1f else 0f,
@@ -677,7 +685,8 @@ private fun PrivacyPoint(number: String, title: String, body: String) {
 private fun MainShell(
     viewModel: MainViewModel,
     onOpenNotificationSettings: () -> Unit,
-    onOpenScreenCaptureSettings: () -> Unit
+    onOpenScreenCaptureSettings: () -> Unit,
+    onShareCompatibilityReport: (String) -> Unit
 ) {
     val parcels by viewModel.parcels.collectAsState()
     val hasAccess by viewModel.hasNotificationAccess.collectAsState()
@@ -687,6 +696,8 @@ private fun MainShell(
     val hasAcceptedPrivacyDisclosure by viewModel.hasAcceptedPrivacyDisclosure.collectAsState()
     val capturePaused by viewModel.capturePaused.collectAsState()
     val hideItemNames by viewModel.hideItemNames.collectAsState()
+    val diagnosticsEnabled by viewModel.diagnosticsEnabled.collectAsState()
+    val latestDiagnostic by viewModel.latestDiagnostic.collectAsState()
     var destination by remember { mutableStateOf(Destination.HOME) }
     var selectedParcel by remember { mutableStateOf<ParcelItem?>(null) }
 
@@ -748,6 +759,8 @@ private fun MainShell(
                     hasAcceptedPrivacyDisclosure = hasAcceptedPrivacyDisclosure,
                     capturePaused = capturePaused,
                     hideItemNames = hideItemNames,
+                    diagnosticsEnabled = diagnosticsEnabled,
+                    latestDiagnostic = latestDiagnostic,
                     onOpenScreenCaptureSettings = onOpenScreenCaptureSettings,
                     onOpenNotificationSettings = onOpenNotificationSettings,
                     onAcceptScreenCaptureDisclosure = viewModel::acceptScreenCaptureDisclosure,
@@ -756,6 +769,9 @@ private fun MainShell(
                     onSetLanguage = viewModel::setLanguage,
                     onSetCapturePaused = viewModel::setCapturePaused,
                     onSetHideItemNames = viewModel::setHideItemNames,
+                    onSetDiagnosticsEnabled = viewModel::setDiagnosticsEnabled,
+                    onClearDiagnostics = viewModel::clearDiagnostics,
+                    onShareCompatibilityReport = onShareCompatibilityReport,
                     onRevokePrivacyConsent = viewModel::revokePrivacyConsent,
                     onAddDemoData = viewModel::addDemoData,
                     onDeleteAll = viewModel::deleteAll,
@@ -1264,6 +1280,8 @@ private fun SettingsScreen(
     hasAcceptedPrivacyDisclosure: Boolean,
     capturePaused: Boolean,
     hideItemNames: Boolean,
+    diagnosticsEnabled: Boolean,
+    latestDiagnostic: CaptureDiagnostic?,
     onOpenScreenCaptureSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onAcceptScreenCaptureDisclosure: () -> Unit,
@@ -1272,6 +1290,9 @@ private fun SettingsScreen(
     onSetLanguage: (AppLanguage) -> Unit,
     onSetCapturePaused: (Boolean) -> Unit,
     onSetHideItemNames: (Boolean) -> Unit,
+    onSetDiagnosticsEnabled: (Boolean) -> Unit,
+    onClearDiagnostics: () -> Unit,
+    onShareCompatibilityReport: (String) -> Unit,
     onRevokePrivacyConsent: () -> Unit,
     onAddDemoData: () -> Unit,
     onDeleteAll: () -> Unit,
@@ -1280,6 +1301,8 @@ private fun SettingsScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmPrivacyConsent by remember { mutableStateOf(false) }
     var permissionTarget by remember { mutableStateOf("screen") }
+    val deviceInfo = remember { DeviceCompatibility.current() }
+    val chinese = LocalAppLanguage.current == AppLanguage.CHINESE
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().statusBarsPadding(),
@@ -1356,6 +1379,15 @@ private fun SettingsScreen(
                     lineHeight = 17.sp
                 )
                 HorizontalDivider(color = Color(0xFFF0EDF1))
+                Text(
+                    tr(
+                        "0.3.3 优先稳定淘宝、京东、拼多多、天猫、菜鸟和顺丰；其他来源暂为实验性兼容。",
+                        "0.3.3 prioritizes Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express; other sources remain experimental."
+                    ),
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
                 sources.forEach { choice ->
                     SettingSwitchRow(
                         title = localizedSourceLabel(choice.source.packageName, choice.source.label),
@@ -1419,6 +1451,56 @@ private fun SettingsScreen(
 
         item {
             SettingsSection(title = tr("测试与数据", "Testing & data")) {
+                Text(
+                    tr(
+                        "本机：${deviceInfo.deviceLabel} · ${deviceInfo.androidLabel}",
+                        "This device: ${deviceInfo.deviceLabel} · ${deviceInfo.androidLabel}"
+                    ),
+                    color = Ink,
+                    fontSize = 12.sp,
+                    lineHeight = 18.sp
+                )
+                Text(
+                    deviceInfo.vendorFamily.localizedCompatibilityAdvice(),
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                HorizontalDivider(color = Color(0xFFF0EDF1))
+                SettingSwitchRow(
+                    title = tr("脱敏识别诊断", "Privacy-safe capture diagnostics"),
+                    checked = diagnosticsEnabled,
+                    onCheckedChange = onSetDiagnosticsEnabled
+                )
+                Text(
+                    tr(
+                        "默认关闭。开启后只记录设备型号、系统与购物应用版本、平台、页面类型、节点数和失败原因，不记录页面原文、商品、订单号、运单号、取件码、地址、电话或账号信息。",
+                        "Off by default. When enabled, only device, Android and shopping-app versions, source, page type, node counts and result reason are stored. No raw text, item, order, tracking, pickup, address, phone, or account data is logged."
+                    ),
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                if (diagnosticsEnabled) {
+                    HorizontalDivider(color = Color(0xFFF0EDF1))
+                    Text(
+                        latestDiagnostic?.localizedSummary()
+                            ?: tr("尚无识别诊断记录", "No capture diagnostic yet"),
+                        color = Ink,
+                        fontSize = 12.sp,
+                        lineHeight = 18.sp
+                    )
+                    if (latestDiagnostic != null) {
+                        val report = latestDiagnostic.compatibilityReport(chinese)
+                        TextButton(onClick = { onShareCompatibilityReport(report) }) {
+                            Text(tr("分享脱敏兼容报告", "Share privacy-safe report"), color = Ink)
+                        }
+                        TextButton(onClick = onClearDiagnostics) {
+                            Text(tr("清除诊断记录", "Clear diagnostic"), color = Muted)
+                        }
+                    }
+                }
+                HorizontalDivider(color = Color(0xFFF0EDF1))
                 TextButton(onClick = onAddDemoData) { Text(tr("添加三条演示包裹", "Add three demo parcels")) }
                 TextButton(onClick = onShowOnboarding) { Text(tr("重新查看欢迎页", "Show welcome screen again")) }
                 TextButton(onClick = { confirmDelete = true }) {
@@ -1430,8 +1512,8 @@ private fun SettingsScreen(
         item {
             Text(
                 tr(
-                    "Parcelume 0.3 仍不申请网络权限。原文只在内存中解析，结构化敏感字段加密保存在本机；当前尚不提供实时联网物流查询。",
-                    "Parcelume 0.3 still has no network permission. Raw text is parsed in memory and structured sensitive fields are encrypted locally; live carrier lookup is not available yet."
+                    "Parcelume 0.3.3 仍不申请网络权限。原文只在内存中解析，结构化敏感字段加密保存在本机；当前尚不提供实时联网物流查询。",
+                    "Parcelume 0.3.3 still has no network permission. Raw text is parsed in memory and structured sensitive fields are encrypted locally; live carrier lookup is not available yet."
                 ),
                 color = Muted,
                 fontSize = 12.sp,
@@ -1704,6 +1786,94 @@ private fun ParcelItem.localizedDate(): String = if (LocalAppLanguage.current ==
     SimpleDateFormat("yyyy年M月d日 HH:mm", Locale.CHINA).format(Date(updatedAt))
 } else {
     SimpleDateFormat("MMM d, yyyy HH:mm", Locale.ENGLISH).format(Date(updatedAt))
+}
+
+@Composable
+private fun CaptureDiagnostic.localizedSummary(): String {
+    val time = if (LocalAppLanguage.current == AppLanguage.CHINESE) {
+        SimpleDateFormat("M月d日 HH:mm:ss", Locale.CHINA).format(Date(observedAt))
+    } else {
+        SimpleDateFormat("MMM d HH:mm:ss", Locale.ENGLISH).format(Date(observedAt))
+    }
+    val result = when (code) {
+        CaptureDiagnosticCode.CAPTURED -> tr("已识别", "Captured")
+        CaptureDiagnosticCode.NO_VISIBLE_TEXT -> tr("页面未暴露可读文字", "No readable page text")
+        CaptureDiagnosticCode.UNSUPPORTED_PAGE -> tr("非订单/物流页或暂不支持", "Unsupported or non-order page")
+        CaptureDiagnosticCode.LOW_CONFIDENCE -> tr("信息不足，未自动保存", "Not enough reliable fields")
+        CaptureDiagnosticCode.SENSITIVE_PAGE_BLOCKED -> tr("敏感页面已拒绝解析", "Sensitive page blocked")
+        CaptureDiagnosticCode.FOOD_OR_INSTANT_DELIVERY_BLOCKED ->
+            tr("外卖或即时配送页面已忽略", "Food or instant-delivery page ignored")
+        CaptureDiagnosticCode.AFTER_SALES_PAGE_BLOCKED ->
+            tr("退款、取消或售后页面已忽略", "Refund, cancellation, or after-sales page ignored")
+    }
+    val kind = when (pageKind) {
+        "order_list" -> tr("订单列表", "order list")
+        "order_detail" -> tr("订单详情", "order detail")
+        "tracking" -> tr("物流详情", "tracking")
+        "pickup" -> tr("待取件", "pickup")
+        "sensitive" -> tr("敏感页面", "sensitive")
+        "food_or_instant_delivery" -> tr("外卖/即时配送", "food/instant delivery")
+        "after_sales" -> tr("退款/取消/售后", "refund/cancellation/after-sales")
+        else -> tr("未知页面", "unknown page")
+    }
+    return tr(
+        "$time · $sourceLabel $sourceVersion\n$result · $kind · 可见节点 $visibleNodeCount · 文字 $textNodeCount · 候选 $candidateCount\n$deviceFamily · $androidVersion · $parserVersion",
+        "$time · $sourceLabel $sourceVersion\n$result · $kind · $visibleNodeCount visible nodes · $textNodeCount text nodes · $candidateCount candidates\n$deviceFamily · $androidVersion · $parserVersion"
+    )
+}
+
+private fun CaptureDiagnostic.compatibilityReport(chinese: Boolean): String = if (chinese) {
+    """Parcelume 脱敏兼容性报告
+Parcelume 版本：${BuildConfig.VERSION_NAME}
+设备：$deviceFamily
+系统：$androidVersion
+购物平台：$sourceLabel
+购物应用版本：$sourceVersion
+解析器：$parserVersion
+结果代码：${code.name}
+页面类型：$pageKind
+可见节点：$visibleNodeCount
+文字节点：$textNodeCount
+候选包裹：$candidateCount
+时间：$observedAt
+
+本报告不包含页面原文、商品名称、订单号、运单号、取件码、地址、电话或账号信息。"""
+} else {
+    """Parcelume privacy-safe compatibility report
+Parcelume version: ${BuildConfig.VERSION_NAME}
+Device: $deviceFamily
+System: $androidVersion
+Shopping source: $sourceLabel
+Shopping app version: $sourceVersion
+Parser: $parserVersion
+Result code: ${code.name}
+Page kind: $pageKind
+Visible nodes: $visibleNodeCount
+Text nodes: $textNodeCount
+Parcel candidates: $candidateCount
+Timestamp: $observedAt
+
+This report contains no raw page text, item name, order or tracking number, pickup code, address, phone number, or account data."""
+}
+
+@Composable
+private fun AndroidVendorFamily.localizedCompatibilityAdvice(): String = when (this) {
+    AndroidVendorFamily.XIAOMI_REDMI -> tr(
+        "小米/红米系统可能在省电或重启后暂停辅助功能。测试前请确认 Parcelume 的辅助功能仍开启，并把电池策略设为不限制；不需要授予联系人、短信、照片或位置权限。",
+        "Xiaomi/Redmi may pause accessibility after battery optimization or a reboot. Before testing, confirm Parcelume accessibility is still enabled and set battery use to unrestricted; contacts, SMS, photos, and location are never needed."
+    )
+    AndroidVendorFamily.HUAWEI, AndroidVendorFamily.HONOR -> tr(
+        "华为/荣耀系统可能限制后台活动。测试前请确认辅助功能仍开启，并允许 Parcelume 后台运行；不需要授予联系人、短信、照片或位置权限。",
+        "Huawei/Honor may restrict background activity. Before testing, confirm accessibility is still enabled and allow Parcelume to run in the background; contacts, SMS, photos, and location are never needed."
+    )
+    AndroidVendorFamily.SAMSUNG -> tr(
+        "三星系统若把 Parcelume 加入休眠应用，识别服务可能被暂停。测试前请确认辅助功能仍开启，并避免将 Parcelume 设为休眠应用。",
+        "Samsung may pause capture if Parcelume is placed in sleeping apps. Before testing, confirm accessibility is still enabled and keep Parcelume out of sleeping apps."
+    )
+    AndroidVendorFamily.OTHER -> tr(
+        "如果重启或长时间未使用后无法识别，请先检查 Parcelume 的系统辅助功能和电池后台限制是否仍然有效。",
+        "If capture stops after a reboot or long idle period, first check Parcelume accessibility and battery background restrictions."
+    )
 }
 
 private fun ParcelItem.matches(filter: ParcelFilter): Boolean = when (filter) {

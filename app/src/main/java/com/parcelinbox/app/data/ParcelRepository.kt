@@ -15,6 +15,12 @@ class ParcelRepository(private val database: ParcelDatabase) {
     }
 
     @Synchronized
+    fun acceptAll(parsed: List<ParsedParcel>) {
+        parsed.forEach(database::upsert)
+        refresh()
+    }
+
+    @Synchronized
     fun markCompleted(id: Long) {
         database.markCompleted(id)
         refresh()

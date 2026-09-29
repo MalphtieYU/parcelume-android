@@ -1,6 +1,7 @@
 package com.parcelinbox.app
 
 import android.app.Application
+import com.parcelinbox.app.capture.CaptureDiagnostics
 import com.parcelinbox.app.data.ParcelDatabase
 import com.parcelinbox.app.data.ParcelRepository
 import com.parcelinbox.app.settings.LocalSettings
@@ -10,6 +11,7 @@ class ParcelInboxApplication : Application() {
     val settings by lazy { LocalSettings(this) }
     val database by lazy { ParcelDatabase(this) }
     val repository by lazy { ParcelRepository(database) }
+    val diagnostics by lazy { CaptureDiagnostics(this) }
 
     override fun onCreate() {
         super.onCreate()

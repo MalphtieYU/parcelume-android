@@ -105,6 +105,12 @@ class LocalSettings(context: Context) {
             preferences.edit { putBoolean(KEY_HIDE_ITEM_NAMES, value) }
         }
 
+    var diagnosticsEnabled: Boolean
+        get() = preferences.getBoolean(KEY_DIAGNOSTICS_ENABLED, false)
+        set(value) {
+            preferences.edit { putBoolean(KEY_DIAGNOSTICS_ENABLED, value) }
+        }
+
     private companion object {
         const val PREFERENCES_NAME = "local_settings"
         const val KEY_RETENTION = "retention_policy"
@@ -116,5 +122,6 @@ class LocalSettings(context: Context) {
         const val KEY_SCREEN_CAPTURE_DISCLOSURE = "privacy_disclosure_v2"
         const val KEY_CAPTURE_PAUSED = "capture_paused"
         const val KEY_HIDE_ITEM_NAMES = "hide_item_names"
+        const val KEY_DIAGNOSTICS_ENABLED = "diagnostics_enabled"
     }
 }

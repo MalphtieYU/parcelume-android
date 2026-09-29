@@ -32,13 +32,15 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                 capture_method TEXT NOT NULL DEFAULT 'NOTIFICATION',
                 title_fingerprint TEXT NOT NULL,
                 order_fingerprint TEXT,
-                tracking_fingerprint TEXT
+                tracking_fingerprint TEXT,
+                pickup_fingerprint TEXT
             )
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX idx_parcels_tracking_fingerprint ON parcels(tracking_fingerprint)")
         db.execSQL("CREATE INDEX idx_parcels_order_fingerprint ON parcels(order_fingerprint)")
         db.execSQL("CREATE INDEX idx_parcels_title_fingerprint ON parcels(title_fingerprint)")
+        db.execSQL("CREATE INDEX idx_parcels_pickup_fingerprint ON parcels(pickup_fingerprint)")
         db.execSQL("CREATE INDEX idx_parcels_updated ON parcels(updated_at DESC)")
     }
 
@@ -59,18 +61,30 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
             db.execSQL("CREATE INDEX idx_parcels_order_fingerprint ON parcels(order_fingerprint)")
             db.execSQL("CREATE INDEX idx_parcels_title_fingerprint ON parcels(title_fingerprint)")
         }
+        if (oldVersion < 4) {
+            db.execSQL("ALTER TABLE parcels ADD COLUMN pickup_fingerprint TEXT")
+            migratePickupFingerprints(db)
+            db.execSQL("CREATE INDEX idx_parcels_pickup_fingerprint ON parcels(pickup_fingerprint)")
+        }
     }
 
     @Synchronized
     fun upsert(parsed: ParsedParcel): Long {
         val db = writableDatabase
-        val existingId = findMatch(db, parsed)
-        val completedAt = if (parsed.status == ParcelStatus.COMPLETED) parsed.observedAt else null
+        val existing = findMatch(db, parsed)
+        val resolvedStatus = resolveParcelStatus(existing?.status, parsed.status)
+        val completedAt = if (resolvedStatus == ParcelStatus.COMPLETED) {
+            existing?.completedAt ?: parsed.observedAt
+        } else {
+            null
+        }
         val values = ContentValues().apply {
             put("source_package", parsed.sourcePackage)
             put("source_label", parsed.sourceLabel)
-            put("title", crypto.encrypt(parsed.title))
-            put("title_fingerprint", crypto.fingerprint(parsed.title))
+            if (existing == null || !parsed.isGenericTitle()) {
+                put("title", crypto.encrypt(parsed.title))
+                put("title_fingerprint", crypto.fingerprint(parsed.title))
+            }
             parsed.orderReference?.let {
                 put("order_reference", crypto.encrypt(it))
                 put("order_fingerprint", crypto.fingerprint(it))
@@ -79,27 +93,30 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                 put("tracking_number", crypto.encrypt(it))
                 put("tracking_fingerprint", crypto.fingerprint(it))
             }
-            parsed.pickupCode?.let { put("pickup_code", crypto.encrypt(it)) }
-            put("status", parsed.status.name)
+            parsed.pickupCode?.let {
+                put("pickup_code", crypto.encrypt(it))
+                put("pickup_fingerprint", crypto.fingerprint(it))
+            }
+            put("status", resolvedStatus.name)
             put("updated_at", parsed.observedAt)
             put("capture_method", parsed.captureMethod.name)
             if (completedAt != null) put("completed_at", completedAt)
         }
 
-        return if (existingId != null) {
-            db.update("parcels", values, "id = ?", arrayOf(existingId.toString()))
-            existingId
+        return if (existing != null) {
+            db.update("parcels", values, "id = ?", arrayOf(existing.id.toString()))
+            existing.id
         } else {
             values.put("created_at", parsed.observedAt)
             db.insertOrThrow("parcels", null, values)
         }
     }
 
-    private fun findMatch(db: SQLiteDatabase, parsed: ParsedParcel): Long? {
+    private fun findMatch(db: SQLiteDatabase, parsed: ParsedParcel): ExistingRecord? {
         if (!parsed.trackingNumber.isNullOrBlank()) {
             db.query(
                 "parcels",
-                arrayOf("id"),
+                EXISTING_COLUMNS,
                 "tracking_fingerprint = ?",
                 arrayOf(crypto.fingerprint(parsed.trackingNumber)),
                 null,
@@ -107,39 +124,50 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                 "updated_at DESC",
                 "1"
             ).use { cursor ->
-                if (cursor.moveToFirst()) return cursor.getLong(0)
+                if (cursor.moveToFirst()) return cursor.toExistingRecord()
             }
         }
 
         if (!parsed.orderReference.isNullOrBlank()) {
             db.query(
                 "parcels",
-                arrayOf("id"),
+                EXISTING_COLUMNS,
                 "source_package = ? AND order_fingerprint = ?",
                 arrayOf(parsed.sourcePackage, crypto.fingerprint(parsed.orderReference)),
+                null,
+                null,
+                "CASE WHEN tracking_fingerprint IS NULL THEN 0 ELSE 1 END, updated_at DESC",
+                null
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val existing = cursor.toExistingRecord()
+                    if (parsed.trackingNumber.isNullOrBlank() || existing.trackingFingerprint == null) {
+                        return existing
+                    }
+                }
+            }
+        }
+
+        if (!parsed.pickupCode.isNullOrBlank()) {
+            val cutoff = parsed.observedAt - PICKUP_MATCH_WINDOW_MS
+            db.query(
+                "parcels",
+                EXISTING_COLUMNS,
+                "source_package = ? AND pickup_fingerprint = ? AND updated_at >= ?",
+                arrayOf(parsed.sourcePackage, crypto.fingerprint(parsed.pickupCode), cutoff.toString()),
                 null,
                 null,
                 "updated_at DESC",
                 "1"
             ).use { cursor ->
-                if (cursor.moveToFirst()) return cursor.getLong(0)
+                if (cursor.moveToFirst()) return cursor.toExistingRecord()
             }
         }
 
-        // 没有运单号时，仅合并同一来源最近 48 小时内仍未完成的相似记录。
-        val cutoff = parsed.observedAt - 48L * 60L * 60L * 1000L
-        db.query(
-            "parcels",
-            arrayOf("id"),
-            "source_package = ? AND title_fingerprint = ? AND updated_at >= ? AND status != ?",
-            arrayOf(parsed.sourcePackage, crypto.fingerprint(parsed.title), cutoff.toString(), ParcelStatus.COMPLETED.name),
-            null,
-            null,
-            "updated_at DESC",
-            "1"
-        ).use { cursor ->
-            return if (cursor.moveToFirst()) cursor.getLong(0) else null
-        }
+        // A generic hidden title is never a safe identity. Without an order,
+        // tracking, or pickup identifier, create a separate record instead of
+        // silently merging unrelated parcels.
+        return null
     }
 
     @Synchronized
@@ -236,13 +264,46 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
         }
     }
 
+    private fun migratePickupFingerprints(db: SQLiteDatabase) {
+        db.query("parcels", arrayOf("id", "pickup_code"), null, null, null, null, null).use { cursor ->
+            while (cursor.moveToNext()) {
+                val id = cursor.getLong(0)
+                val encryptedPickup = cursor.getString(1) ?: continue
+                val pickup = crypto.decrypt(encryptedPickup) ?: continue
+                val values = ContentValues().apply {
+                    put("pickup_fingerprint", crypto.fingerprint(pickup))
+                }
+                db.update("parcels", values, "id = ?", arrayOf(id.toString()))
+            }
+        }
+    }
+
+    private fun ParsedParcel.isGenericTitle(): Boolean =
+        title == "$sourceLabel 包裹" || title == "$sourceLabel 订单" || title == "受保护的包裹"
+
+    private fun android.database.Cursor.toExistingRecord(): ExistingRecord = ExistingRecord(
+        id = getLong(getColumnIndexOrThrow("id")),
+        status = ParcelStatus.valueOf(getString(getColumnIndexOrThrow("status"))),
+        trackingFingerprint = getString(getColumnIndexOrThrow("tracking_fingerprint")),
+        completedAt = getNullableLong("completed_at")
+    )
+
     private fun android.database.Cursor.getNullableLong(column: String): Long? {
         val index = getColumnIndexOrThrow(column)
         return if (isNull(index)) null else getLong(index)
     }
 
     private companion object {
+        val EXISTING_COLUMNS = arrayOf("id", "status", "tracking_fingerprint", "completed_at")
+        const val PICKUP_MATCH_WINDOW_MS = 14L * 24L * 60L * 60L * 1000L
         const val DATABASE_NAME = "parcel_inbox.db"
-        const val DATABASE_VERSION = 3
+        const val DATABASE_VERSION = 4
     }
+
+    private data class ExistingRecord(
+        val id: Long,
+        val status: ParcelStatus,
+        val trackingFingerprint: String?,
+        val completedAt: Long?
+    )
 }

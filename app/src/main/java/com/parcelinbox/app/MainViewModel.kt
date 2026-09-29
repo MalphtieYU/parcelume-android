@@ -7,6 +7,7 @@ import android.view.accessibility.AccessibilityManager
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import com.parcelinbox.app.capture.ParcelAccessibilityService
+import com.parcelinbox.app.capture.CaptureDiagnostic
 import com.parcelinbox.app.data.CaptureMethod
 import com.parcelinbox.app.data.ParcelItem
 import com.parcelinbox.app.data.ParcelStatus
@@ -58,6 +59,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _hideItemNames = MutableStateFlow(app.settings.hideItemNames)
     val hideItemNames = _hideItemNames.asStateFlow()
 
+    private val _diagnosticsEnabled = MutableStateFlow(app.settings.diagnosticsEnabled)
+    val diagnosticsEnabled = _diagnosticsEnabled.asStateFlow()
+    val latestDiagnostic: StateFlow<CaptureDiagnostic?> = app.diagnostics.latest
+
     init {
         refresh()
     }
@@ -76,6 +81,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _hasAcceptedPrivacyDisclosure.value = app.settings.hasAcceptedScreenCaptureDisclosure
         _capturePaused.value = app.settings.capturePaused
         _hideItemNames.value = app.settings.hideItemNames
+        _diagnosticsEnabled.value = app.settings.diagnosticsEnabled
     }
 
     fun setSourceEnabled(packageName: String, enabled: Boolean) {
@@ -135,6 +141,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         app.settings.hideItemNames = hidden
         _hideItemNames.value = hidden
     }
+
+    fun setDiagnosticsEnabled(enabled: Boolean) {
+        app.settings.diagnosticsEnabled = enabled
+        _diagnosticsEnabled.value = enabled
+        if (!enabled) app.diagnostics.clear()
+    }
+
+    fun clearDiagnostics() = app.diagnostics.clear()
 
     fun addDemoData() {
         val now = System.currentTimeMillis()

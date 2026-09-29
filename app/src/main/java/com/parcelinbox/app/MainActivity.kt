@@ -26,7 +26,8 @@ class MainActivity : ComponentActivity() {
                 ParcelInboxApp(
                     viewModel = screenModel,
                     onOpenNotificationSettings = ::openSystemNotificationAccess,
-                    onOpenScreenCaptureSettings = ::openSystemAccessibilitySettings
+                    onOpenScreenCaptureSettings = ::openSystemAccessibilitySettings,
+                    onShareCompatibilityReport = ::shareCompatibilityReport
                 )
             }
         }
@@ -54,7 +55,6 @@ class MainActivity : ComponentActivity() {
         }
 
         for (intent in candidates) {
-            if (intent.resolveActivity(packageManager) == null) continue
             if (runCatching { startActivity(intent) }.isSuccess) return
         }
     }
@@ -66,8 +66,18 @@ class MainActivity : ComponentActivity() {
             Intent(Settings.ACTION_SETTINGS)
         )
         for (intent in candidates) {
-            if (intent.resolveActivity(packageManager) == null) continue
             if (runCatching { startActivity(intent) }.isSuccess) return
+        }
+    }
+
+    /** Shares only the explicitly generated, privacy-safe compatibility text. */
+    private fun shareCompatibilityReport(report: String) {
+        val share = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, "Parcelume compatibility report")
+            .putExtra(Intent.EXTRA_TEXT, report)
+        runCatching {
+            startActivity(Intent.createChooser(share, getString(R.string.app_name)))
         }
     }
 
