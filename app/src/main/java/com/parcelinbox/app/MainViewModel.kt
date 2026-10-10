@@ -62,6 +62,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _diagnosticsEnabled = MutableStateFlow(app.settings.diagnosticsEnabled)
     val diagnosticsEnabled = _diagnosticsEnabled.asStateFlow()
     val latestDiagnostic: StateFlow<CaptureDiagnostic?> = app.diagnostics.latest
+    val diagnosticHistory: StateFlow<List<CaptureDiagnostic>> = app.diagnostics.history
+    val canUndoLastCapture: StateFlow<Boolean> = app.repository.canUndoLastCapture
 
     init {
         refresh()
@@ -100,6 +102,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun markCompleted(id: Long) = app.repository.markCompleted(id)
+
+    fun updateParcel(id: Long, title: String, status: ParcelStatus): Boolean =
+        app.repository.updateParcel(id, title, status)
+
+    fun deleteParcel(id: Long): Boolean = app.repository.deleteParcel(id)
+
+    fun undoLastCapture(): Int = app.repository.undoLastCapture()
 
     fun deleteAll() = app.repository.deleteAll()
 

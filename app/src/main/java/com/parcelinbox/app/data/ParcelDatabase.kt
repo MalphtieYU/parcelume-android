@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import androidx.core.database.sqlite.transaction
 
 class ParcelDatabase(context: Context) : SQLiteOpenHelper(
     context,
@@ -71,6 +72,29 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
     @Synchronized
     fun upsert(parsed: ParsedParcel): Long {
         val db = writableDatabase
+        return upsert(db, parsed).id
+    }
+
+    @Synchronized
+    fun upsertAll(parsed: List<ParsedParcel>): ParcelBatchResult {
+        if (parsed.isEmpty()) return ParcelBatchResult(emptyList(), emptyList())
+        val db = writableDatabase
+        val affectedIds = ArrayList<Long>(parsed.size)
+        val insertedIds = ArrayList<Long>(parsed.size)
+        db.transaction {
+            parsed.forEach { parcel ->
+                val result = upsert(db, parcel)
+                affectedIds += result.id
+                if (result.inserted) insertedIds += result.id
+            }
+        }
+        return ParcelBatchResult(
+            affectedIds = affectedIds.distinct(),
+            insertedIds = insertedIds.distinct()
+        )
+    }
+
+    private fun upsert(db: SQLiteDatabase, parsed: ParsedParcel): ParcelUpsertResult {
         val existing = findMatch(db, parsed)
         val resolvedStatus = resolveParcelStatus(existing?.status, parsed.status)
         val completedAt = if (resolvedStatus == ParcelStatus.COMPLETED) {
@@ -105,10 +129,10 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
 
         return if (existing != null) {
             db.update("parcels", values, "id = ?", arrayOf(existing.id.toString()))
-            existing.id
+            ParcelUpsertResult(existing.id, inserted = false)
         } else {
             values.put("created_at", parsed.observedAt)
-            db.insertOrThrow("parcels", null, values)
+            ParcelUpsertResult(db.insertOrThrow("parcels", null, values), inserted = true)
         }
     }
 
@@ -219,6 +243,41 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
     }
 
     @Synchronized
+    fun updateParcel(
+        id: Long,
+        title: String,
+        status: ParcelStatus,
+        now: Long = System.currentTimeMillis()
+    ): Boolean {
+        val normalizedTitle = title.trim().take(160)
+        if (normalizedTitle.isBlank()) return false
+        val values = ContentValues().apply {
+            put("title", crypto.encrypt(normalizedTitle))
+            put("title_fingerprint", crypto.fingerprint(normalizedTitle))
+            put("status", status.name)
+            put("updated_at", now)
+            if (status == ParcelStatus.COMPLETED) put("completed_at", now) else putNull("completed_at")
+        }
+        return writableDatabase.update("parcels", values, "id = ?", arrayOf(id.toString())) == 1
+    }
+
+    @Synchronized
+    fun deleteById(id: Long): Boolean =
+        writableDatabase.delete("parcels", "id = ?", arrayOf(id.toString())) == 1
+
+    @Synchronized
+    fun deleteByIds(ids: Collection<Long>): Int {
+        val safeIds = ids.distinct()
+        if (safeIds.isEmpty()) return 0
+        val placeholders = safeIds.joinToString(",") { "?" }
+        return writableDatabase.delete(
+            "parcels",
+            "id IN ($placeholders)",
+            safeIds.map(Long::toString).toTypedArray()
+        )
+    }
+
+    @Synchronized
     fun deleteCompletedBefore(cutoff: Long): Int {
         return writableDatabase.delete(
             "parcels",
@@ -307,3 +366,13 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
         val completedAt: Long?
     )
 }
+
+data class ParcelBatchResult(
+    val affectedIds: List<Long>,
+    val insertedIds: List<Long>
+)
+
+private data class ParcelUpsertResult(
+    val id: Long,
+    val inserted: Boolean
+)

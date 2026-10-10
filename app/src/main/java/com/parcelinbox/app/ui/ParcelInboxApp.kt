@@ -100,6 +100,7 @@ import com.parcelinbox.app.data.ParcelItem
 import com.parcelinbox.app.data.ParcelStatus
 import com.parcelinbox.app.settings.AppLanguage
 import com.parcelinbox.app.settings.RetentionPolicy
+import com.parcelinbox.app.settings.ShoppingSourceTier
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -133,6 +134,7 @@ fun ParcelInboxApp(
     viewModel: MainViewModel,
     onOpenNotificationSettings: () -> Unit,
     onOpenScreenCaptureSettings: () -> Unit,
+    onOpenAppDetailsSettings: () -> Unit,
     onShareCompatibilityReport: (String) -> Unit
 ) {
     val onboardingComplete by viewModel.hasCompletedOnboarding.collectAsState()
@@ -173,6 +175,7 @@ fun ParcelInboxApp(
                     viewModel = viewModel,
                     onOpenNotificationSettings = onOpenNotificationSettings,
                     onOpenScreenCaptureSettings = onOpenScreenCaptureSettings,
+                    onOpenAppDetailsSettings = onOpenAppDetailsSettings,
                     onShareCompatibilityReport = onShareCompatibilityReport
                 )
             }
@@ -686,6 +689,7 @@ private fun MainShell(
     viewModel: MainViewModel,
     onOpenNotificationSettings: () -> Unit,
     onOpenScreenCaptureSettings: () -> Unit,
+    onOpenAppDetailsSettings: () -> Unit,
     onShareCompatibilityReport: (String) -> Unit
 ) {
     val parcels by viewModel.parcels.collectAsState()
@@ -698,6 +702,8 @@ private fun MainShell(
     val hideItemNames by viewModel.hideItemNames.collectAsState()
     val diagnosticsEnabled by viewModel.diagnosticsEnabled.collectAsState()
     val latestDiagnostic by viewModel.latestDiagnostic.collectAsState()
+    val diagnosticHistory by viewModel.diagnosticHistory.collectAsState()
+    val canUndoLastCapture by viewModel.canUndoLastCapture.collectAsState()
     var destination by remember { mutableStateOf(Destination.HOME) }
     var selectedParcel by remember { mutableStateOf<ParcelItem?>(null) }
 
@@ -761,8 +767,11 @@ private fun MainShell(
                     hideItemNames = hideItemNames,
                     diagnosticsEnabled = diagnosticsEnabled,
                     latestDiagnostic = latestDiagnostic,
+                    diagnosticHistory = diagnosticHistory,
+                    canUndoLastCapture = canUndoLastCapture,
                     onOpenScreenCaptureSettings = onOpenScreenCaptureSettings,
                     onOpenNotificationSettings = onOpenNotificationSettings,
+                    onOpenAppDetailsSettings = onOpenAppDetailsSettings,
                     onAcceptScreenCaptureDisclosure = viewModel::acceptScreenCaptureDisclosure,
                     onToggleSource = viewModel::setSourceEnabled,
                     onSetRetention = viewModel::setRetention,
@@ -772,6 +781,7 @@ private fun MainShell(
                     onSetDiagnosticsEnabled = viewModel::setDiagnosticsEnabled,
                     onClearDiagnostics = viewModel::clearDiagnostics,
                     onShareCompatibilityReport = onShareCompatibilityReport,
+                    onUndoLastCapture = viewModel::undoLastCapture,
                     onRevokePrivacyConsent = viewModel::revokePrivacyConsent,
                     onAddDemoData = viewModel::addDemoData,
                     onDeleteAll = viewModel::deleteAll,
@@ -786,6 +796,14 @@ private fun MainShell(
             parcel = parcel,
             onMarkCompleted = {
                 viewModel.markCompleted(parcel.id)
+                selectedParcel = null
+            },
+            onUpdate = { title, status ->
+                viewModel.updateParcel(parcel.id, title, status)
+                selectedParcel = null
+            },
+            onDelete = {
+                viewModel.deleteParcel(parcel.id)
                 selectedParcel = null
             },
             onDismiss = { selectedParcel = null }
@@ -1282,8 +1300,11 @@ private fun SettingsScreen(
     hideItemNames: Boolean,
     diagnosticsEnabled: Boolean,
     latestDiagnostic: CaptureDiagnostic?,
+    diagnosticHistory: List<CaptureDiagnostic>,
+    canUndoLastCapture: Boolean,
     onOpenScreenCaptureSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
+    onOpenAppDetailsSettings: () -> Unit,
     onAcceptScreenCaptureDisclosure: () -> Unit,
     onToggleSource: (String, Boolean) -> Unit,
     onSetRetention: (RetentionPolicy) -> Unit,
@@ -1293,6 +1314,7 @@ private fun SettingsScreen(
     onSetDiagnosticsEnabled: (Boolean) -> Unit,
     onClearDiagnostics: () -> Unit,
     onShareCompatibilityReport: (String) -> Unit,
+    onUndoLastCapture: () -> Int,
     onRevokePrivacyConsent: () -> Unit,
     onAddDemoData: () -> Unit,
     onDeleteAll: () -> Unit,
@@ -1301,6 +1323,7 @@ private fun SettingsScreen(
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmPrivacyConsent by remember { mutableStateOf(false) }
     var permissionTarget by remember { mutableStateOf("screen") }
+    var showExperimentalSources by remember { mutableStateOf(false) }
     val deviceInfo = remember { DeviceCompatibility.current() }
     val chinese = LocalAppLanguage.current == AppLanguage.CHINESE
 
@@ -1349,6 +1372,15 @@ private fun SettingsScreen(
                         }
                     }
                 )
+                SettingActionRow(
+                    title = tr("侧载受限设置", "Sideloaded restricted settings"),
+                    subtitle = tr(
+                        "若系统不允许开启辅助功能，请打开应用信息并在右上角菜单中允许受限设置",
+                        "If accessibility is blocked, open App info and allow restricted settings from its top-right menu"
+                    ),
+                    action = tr("应用信息", "App info"),
+                    onClick = onOpenAppDetailsSettings
+                )
                 HorizontalDivider(color = Color(0xFFF0EDF1))
                 SettingActionRow(
                     title = tr("通知辅助识别", "Notification backup"),
@@ -1381,19 +1413,45 @@ private fun SettingsScreen(
                 HorizontalDivider(color = Color(0xFFF0EDF1))
                 Text(
                     tr(
-                        "0.3.3 优先稳定淘宝、京东、拼多多、天猫、菜鸟和顺丰；其他来源暂为实验性兼容。",
-                        "0.3.3 prioritizes Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express; other sources remain experimental."
+                        "重点适配平台经过专项规则测试；实验性平台可能因页面变化出现漏识别。",
+                        "Core sources have dedicated parsing tests; experimental sources may miss changing page layouts."
                     ),
                     color = Muted,
                     fontSize = 12.sp,
                     lineHeight = 17.sp
                 )
-                sources.forEach { choice ->
+                Text(
+                    tr("重点适配", "Core sources"),
+                    color = Ink,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                sources.filter { it.source.tier == ShoppingSourceTier.CORE }.forEach { choice ->
                     SettingSwitchRow(
                         title = localizedSourceLabel(choice.source.packageName, choice.source.label),
                         checked = choice.enabled,
                         onCheckedChange = { onToggleSource(choice.source.packageName, it) }
                     )
+                }
+                HorizontalDivider(color = Color(0xFFF0EDF1))
+                TextButton(onClick = { showExperimentalSources = !showExperimentalSources }) {
+                    Text(
+                        if (showExperimentalSources) {
+                            tr("收起实验性平台", "Hide experimental sources")
+                        } else {
+                            tr("查看实验性平台（${sources.count { it.source.tier == ShoppingSourceTier.EXPERIMENTAL }}）", "Show experimental sources (${sources.count { it.source.tier == ShoppingSourceTier.EXPERIMENTAL }})")
+                        },
+                        color = Ink
+                    )
+                }
+                if (showExperimentalSources) {
+                    sources.filter { it.source.tier == ShoppingSourceTier.EXPERIMENTAL }.forEach { choice ->
+                        SettingSwitchRow(
+                            title = localizedSourceLabel(choice.source.packageName, choice.source.label),
+                            checked = choice.enabled,
+                            onCheckedChange = { onToggleSource(choice.source.packageName, it) }
+                        )
+                    }
                 }
             }
         }
@@ -1452,6 +1510,47 @@ private fun SettingsScreen(
         item {
             SettingsSection(title = tr("测试与数据", "Testing & data")) {
                 Text(
+                    tr("重点平台识别健康检查", "Core-source capture health"),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+                sources.filter { it.source.tier == ShoppingSourceTier.CORE }.forEach { choice ->
+                    val diagnostic = diagnosticHistory.firstOrNull {
+                        it.sourceLabel == choice.source.label
+                    }
+                    val health = when {
+                        !choice.enabled -> tr("未选择", "Not selected")
+                        !hasAcceptedPrivacyDisclosure -> tr("等待隐私同意", "Consent required")
+                        !hasScreenCaptureAccess -> tr("系统权限未开启", "System access off")
+                        capturePaused -> tr("识别已暂停", "Capture paused")
+                        diagnostic == null -> tr("已就绪，等待首次测试", "Ready for first test")
+                        else -> diagnostic.localizedResultLabel()
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            localizedSourceLabel(choice.source.packageName, choice.source.label),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            health,
+                            color = if (diagnostic?.code == CaptureDiagnosticCode.STORAGE_ERROR) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                Muted
+                            },
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.End,
+                            modifier = Modifier.fillMaxWidth(0.62f)
+                        )
+                    }
+                }
+                HorizontalDivider(color = Color(0xFFF0EDF1))
+                Text(
                     tr(
                         "本机：${deviceInfo.deviceLabel} · ${deviceInfo.androidLabel}",
                         "This device: ${deviceInfo.deviceLabel} · ${deviceInfo.androidLabel}"
@@ -1474,8 +1573,8 @@ private fun SettingsScreen(
                 )
                 Text(
                     tr(
-                        "默认关闭。开启后只记录设备型号、系统与购物应用版本、平台、页面类型、节点数和失败原因，不记录页面原文、商品、订单号、运单号、取件码、地址、电话或账号信息。",
-                        "Off by default. When enabled, only device, Android and shopping-app versions, source, page type, node counts and result reason are stored. No raw text, item, order, tracking, pickup, address, phone, or account data is logged."
+                        "最多保留最近 20 次结果，只记录设备、版本、平台、页面类型、节点数和原因代码；不记录页面原文、商品、订单号、运单号、取件码、地址、电话或账号。",
+                        "Keeps up to 20 recent results with device, versions, source, page type, node counts and reason codes only. No raw text, item, order, tracking, pickup, address, phone, or account data is logged."
                     ),
                     color = Muted,
                     fontSize = 12.sp,
@@ -1484,23 +1583,41 @@ private fun SettingsScreen(
                 if (diagnosticsEnabled) {
                     HorizontalDivider(color = Color(0xFFF0EDF1))
                     Text(
+                        tr("最近识别状态", "Recent capture status"),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
+                    Text(
                         latestDiagnostic?.localizedSummary()
                             ?: tr("尚无识别诊断记录", "No capture diagnostic yet"),
                         color = Ink,
                         fontSize = 12.sp,
                         lineHeight = 18.sp
                     )
-                    if (latestDiagnostic != null) {
-                        val report = latestDiagnostic.compatibilityReport(chinese)
+                    diagnosticHistory.drop(1).take(4).forEach { diagnostic ->
+                        Text(
+                            diagnostic.localizedCompactSummary(),
+                            color = Muted,
+                            fontSize = 11.sp,
+                            lineHeight = 16.sp
+                        )
+                    }
+                    if (diagnosticHistory.isNotEmpty()) {
+                        val report = diagnosticHistory.compatibilityReport(chinese)
                         TextButton(onClick = { onShareCompatibilityReport(report) }) {
                             Text(tr("分享脱敏兼容报告", "Share privacy-safe report"), color = Ink)
                         }
                         TextButton(onClick = onClearDiagnostics) {
-                            Text(tr("清除诊断记录", "Clear diagnostic"), color = Muted)
+                            Text(tr("清除全部诊断记录", "Clear all diagnostics"), color = Muted)
                         }
                     }
                 }
                 HorizontalDivider(color = Color(0xFFF0EDF1))
+                if (canUndoLastCapture) {
+                    TextButton(onClick = { onUndoLastCapture() }) {
+                        Text(tr("撤销最近一次新增识别", "Undo last newly captured parcels"), color = Ink)
+                    }
+                }
                 TextButton(onClick = onAddDemoData) { Text(tr("添加三条演示包裹", "Add three demo parcels")) }
                 TextButton(onClick = onShowOnboarding) { Text(tr("重新查看欢迎页", "Show welcome screen again")) }
                 TextButton(onClick = { confirmDelete = true }) {
@@ -1512,8 +1629,8 @@ private fun SettingsScreen(
         item {
             Text(
                 tr(
-                    "Parcelume 0.3.3 仍不申请网络权限。原文只在内存中解析，结构化敏感字段加密保存在本机；当前尚不提供实时联网物流查询。",
-                    "Parcelume 0.3.3 still has no network permission. Raw text is parsed in memory and structured sensitive fields are encrypted locally; live carrier lookup is not available yet."
+                    "Parcelume 0.3.4 仍不申请网络权限。原文只在内存中解析，结构化敏感字段加密保存在本机；当前尚不提供实时联网物流查询。",
+                    "Parcelume 0.3.4 still has no network permission. Raw text is parsed in memory and structured sensitive fields are encrypted locally; live carrier lookup is not available yet."
                 ),
                 color = Muted,
                 fontSize = 12.sp,
@@ -1623,48 +1740,108 @@ private fun SettingSwitchRow(title: String, checked: Boolean, onCheckedChange: (
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ParcelDetailDialog(
     parcel: ParcelItem,
     onMarkCompleted: () -> Unit,
+    onUpdate: (String, ParcelStatus) -> Unit,
+    onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    var editing by remember(parcel.id) { mutableStateOf(false) }
+    var editedTitle by remember(parcel.id) { mutableStateOf(parcel.title) }
+    var editedStatus by remember(parcel.id) { mutableStateOf(parcel.status) }
+    var confirmDelete by remember(parcel.id) { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(30.dp),
-        title = { Text(localizedParcelTitle(parcel), fontWeight = FontWeight.Black) },
+        title = {
+            Text(
+                if (editing) tr("修正包裹", "Correct parcel") else localizedParcelTitle(parcel),
+                fontWeight = FontWeight.Black
+            )
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth().height(150.dp),
-                    shape = RoundedCornerShape(24.dp),
-                    color = parcel.cardColor()
-                ) {
-                    ImageAsset(parcel.imageResource(), Modifier.padding(6.dp))
+                if (editing) {
+                    Text(tr("名称", "Name"), fontSize = 12.sp, color = Muted)
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xFFF6F3F2)
+                    ) {
+                        BasicTextField(
+                            value = editedTitle,
+                            onValueChange = { editedTitle = it.take(160) },
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Ink),
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp)
+                        )
+                    }
+                    Text(tr("状态", "Status"), fontSize = 12.sp, color = Muted)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        ParcelStatus.entries.forEach { status ->
+                            FilterChip(
+                                selected = editedStatus == status,
+                                onClick = { editedStatus = status },
+                                label = { Text(status.localizedLabel(), fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Ink,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+                    Text(
+                        tr(
+                            "只修改本机记录，不会回写购物平台。订单号、运单号和取件码不会出现在诊断报告中。",
+                            "Changes stay on this device and are never written back to the shopping app. Identifiers never appear in diagnostics."
+                        ),
+                        color = Muted,
+                        fontSize = 11.sp,
+                        lineHeight = 16.sp
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().height(150.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        color = parcel.cardColor()
+                    ) {
+                        ImageAsset(parcel.imageResource(), Modifier.padding(6.dp))
+                    }
+                    Text(tr("来源：${localizedSourceLabel(parcel.sourcePackage, parcel.sourceLabel)}", "Source: ${localizedSourceLabel(parcel.sourcePackage, parcel.sourceLabel)}"))
+                    Text(tr("状态：${parcel.status.localizedLabel()}", "Status: ${parcel.status.localizedLabel()}"))
+                    parcel.orderReference?.let { Text(tr("订单号：$it", "Order: $it")) }
+                    parcel.trackingNumber?.let { Text(tr("运单号：$it", "Tracking: $it")) }
+                    parcel.pickupCode?.let { Text(tr("取件码：$it", "Pickup code: $it"), fontWeight = FontWeight.Black) }
+                    Text(
+                        when (parcel.captureMethod) {
+                            CaptureMethod.SCREEN -> tr("识别方式：购物页面", "Captured from: shopping screen")
+                            CaptureMethod.NOTIFICATION -> tr("识别方式：通知辅助", "Captured from: notification backup")
+                            CaptureMethod.DEMO -> tr("识别方式：演示数据", "Captured from: demo data")
+                        },
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
+                    Text(
+                        tr("更新于 ${parcel.localizedDate()}", "Updated ${parcel.localizedDate()}"),
+                        color = Muted,
+                        fontSize = 12.sp
+                    )
                 }
-                Text(tr("来源：${localizedSourceLabel(parcel.sourcePackage, parcel.sourceLabel)}", "Source: ${localizedSourceLabel(parcel.sourcePackage, parcel.sourceLabel)}"))
-                Text(tr("状态：${parcel.status.localizedLabel()}", "Status: ${parcel.status.localizedLabel()}"))
-                parcel.orderReference?.let { Text(tr("订单号：$it", "Order: $it")) }
-                parcel.trackingNumber?.let { Text(tr("运单号：$it", "Tracking: $it")) }
-                parcel.pickupCode?.let { Text(tr("取件码：$it", "Pickup code: $it"), fontWeight = FontWeight.Black) }
-                Text(
-                    when (parcel.captureMethod) {
-                        CaptureMethod.SCREEN -> tr("识别方式：购物页面", "Captured from: shopping screen")
-                        CaptureMethod.NOTIFICATION -> tr("识别方式：通知辅助", "Captured from: notification backup")
-                        CaptureMethod.DEMO -> tr("识别方式：演示数据", "Captured from: demo data")
-                    },
-                    color = Muted,
-                    fontSize = 12.sp
-                )
-                Text(
-                    tr("更新于 ${parcel.localizedDate()}", "Updated ${parcel.localizedDate()}"),
-                    color = Muted,
-                    fontSize = 12.sp
-                )
             }
         },
         confirmButton = {
-            if (parcel.status == ParcelStatus.COMPLETED) {
+            if (editing) {
+                Button(
+                    onClick = { onUpdate(editedTitle.trim(), editedStatus) },
+                    enabled = editedTitle.isNotBlank(),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Ink)
+                ) { Text(tr("保存", "Save")) }
+            } else if (parcel.status == ParcelStatus.COMPLETED) {
                 TextButton(onClick = onDismiss) { Text(tr("关闭", "Close")) }
             } else {
                 Button(
@@ -1675,11 +1852,39 @@ private fun ParcelDetailDialog(
             }
         },
         dismissButton = {
-            if (parcel.status != ParcelStatus.COMPLETED) {
-                TextButton(onClick = onDismiss) { Text(tr("关闭", "Close")) }
+            if (editing) {
+                TextButton(onClick = { editing = false }) { Text(tr("取消", "Cancel"), color = Muted) }
+            } else {
+                Row {
+                    TextButton(onClick = { editing = true }) { Text(tr("修正", "Correct"), color = Ink) }
+                    TextButton(onClick = { confirmDelete = true }) {
+                        Text(tr("删除", "Delete"), color = MaterialTheme.colorScheme.error)
+                    }
+                    if (parcel.status != ParcelStatus.COMPLETED) {
+                        TextButton(onClick = onDismiss) { Text(tr("关闭", "Close"), color = Muted) }
+                    }
+                }
             }
         }
     )
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(tr("删除这个包裹？", "Delete this parcel?"), fontWeight = FontWeight.Black) },
+            text = {
+                Text(tr("只删除这条本地记录，无法撤销，也不会影响购物平台订单。", "Only this local record is deleted. This cannot be undone and does not affect the shopping order."))
+            },
+            confirmButton = {
+                TextButton(onClick = onDelete) {
+                    Text(tr("删除", "Delete"), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text(tr("取消", "Cancel")) }
+            }
+        )
+    }
 }
 
 @Composable
@@ -1797,6 +2002,9 @@ private fun CaptureDiagnostic.localizedSummary(): String {
     }
     val result = when (code) {
         CaptureDiagnosticCode.CAPTURED -> tr("已识别", "Captured")
+        CaptureDiagnosticCode.DUPLICATE_IGNORED -> tr("内容已存在，未重复添加", "Already saved; duplicate ignored")
+        CaptureDiagnosticCode.ROOT_UNAVAILABLE -> tr("系统暂未提供页面内容", "Page content temporarily unavailable")
+        CaptureDiagnosticCode.STORAGE_ERROR -> tr("本地保存失败", "Local save failed")
         CaptureDiagnosticCode.NO_VISIBLE_TEXT -> tr("页面未暴露可读文字", "No readable page text")
         CaptureDiagnosticCode.UNSUPPORTED_PAGE -> tr("非订单/物流页或暂不支持", "Unsupported or non-order page")
         CaptureDiagnosticCode.LOW_CONFIDENCE -> tr("信息不足，未自动保存", "Not enough reliable fields")
@@ -1814,6 +2022,7 @@ private fun CaptureDiagnostic.localizedSummary(): String {
         "sensitive" -> tr("敏感页面", "sensitive")
         "food_or_instant_delivery" -> tr("外卖/即时配送", "food/instant delivery")
         "after_sales" -> tr("退款/取消/售后", "refund/cancellation/after-sales")
+        "unavailable" -> tr("页面尚未就绪", "page not ready")
         else -> tr("未知页面", "unknown page")
     }
     return tr(
@@ -1822,38 +2031,71 @@ private fun CaptureDiagnostic.localizedSummary(): String {
     )
 }
 
-private fun CaptureDiagnostic.compatibilityReport(chinese: Boolean): String = if (chinese) {
-    """Parcelume 脱敏兼容性报告
+@Composable
+private fun CaptureDiagnostic.localizedCompactSummary(): String {
+    val time = if (LocalAppLanguage.current == AppLanguage.CHINESE) {
+        SimpleDateFormat("M月d日 HH:mm:ss", Locale.CHINA).format(Date(observedAt))
+    } else {
+        SimpleDateFormat("MMM d HH:mm:ss", Locale.ENGLISH).format(Date(observedAt))
+    }
+    return "$time · $sourceLabel · ${localizedResultLabel()}"
+}
+
+@Composable
+private fun CaptureDiagnostic.localizedResultLabel(): String = when (code) {
+        CaptureDiagnosticCode.CAPTURED -> tr("已识别 $candidateCount 个", "Captured $candidateCount")
+        CaptureDiagnosticCode.DUPLICATE_IGNORED -> tr("重复内容已忽略", "Duplicate ignored")
+        CaptureDiagnosticCode.ROOT_UNAVAILABLE -> tr("页面尚未就绪", "Page not ready")
+        CaptureDiagnosticCode.STORAGE_ERROR -> tr("本地保存失败", "Local save failed")
+        CaptureDiagnosticCode.NO_VISIBLE_TEXT -> tr("无可读文字", "No readable text")
+        CaptureDiagnosticCode.UNSUPPORTED_PAGE -> tr("不是支持的订单页", "Unsupported page")
+        CaptureDiagnosticCode.LOW_CONFIDENCE -> tr("信息不足", "Not enough reliable fields")
+        CaptureDiagnosticCode.SENSITIVE_PAGE_BLOCKED -> tr("敏感页已拦截", "Sensitive page blocked")
+        CaptureDiagnosticCode.FOOD_OR_INSTANT_DELIVERY_BLOCKED -> tr("外卖页已忽略", "Food page ignored")
+        CaptureDiagnosticCode.AFTER_SALES_PAGE_BLOCKED -> tr("售后页已忽略", "After-sales page ignored")
+    }
+
+private fun List<CaptureDiagnostic>.compatibilityReport(chinese: Boolean): String {
+    val latest = firstOrNull()
+    val heading = if (chinese) {
+        """Parcelume 脱敏兼容性报告
 Parcelume 版本：${BuildConfig.VERSION_NAME}
-设备：$deviceFamily
-系统：$androidVersion
-购物平台：$sourceLabel
-购物应用版本：$sourceVersion
-解析器：$parserVersion
-结果代码：${code.name}
-页面类型：$pageKind
-可见节点：$visibleNodeCount
-文字节点：$textNodeCount
-候选包裹：$candidateCount
-时间：$observedAt
-
-本报告不包含页面原文、商品名称、订单号、运单号、取件码、地址、电话或账号信息。"""
-} else {
-    """Parcelume privacy-safe compatibility report
+设备：${latest?.deviceFamily ?: "Unknown"}
+系统：${latest?.androidVersion ?: "Unknown"}
+记录数量：$size
+"""
+    } else {
+        """Parcelume privacy-safe compatibility report
 Parcelume version: ${BuildConfig.VERSION_NAME}
-Device: $deviceFamily
-System: $androidVersion
-Shopping source: $sourceLabel
-Shopping app version: $sourceVersion
-Parser: $parserVersion
-Result code: ${code.name}
-Page kind: $pageKind
-Visible nodes: $visibleNodeCount
-Text nodes: $textNodeCount
-Parcel candidates: $candidateCount
-Timestamp: $observedAt
-
-This report contains no raw page text, item name, order or tracking number, pickup code, address, phone number, or account data."""
+Device: ${latest?.deviceFamily ?: "Unknown"}
+System: ${latest?.androidVersion ?: "Unknown"}
+Record count: $size
+"""
+    }
+    val records = joinToString("\n") { item ->
+        listOf(
+            item.observedAt,
+            item.sourceLabel,
+            item.sourceVersion,
+            item.parserVersion,
+            item.code.name,
+            item.pageKind,
+            item.visibleNodeCount,
+            item.textNodeCount,
+            item.candidateCount
+        ).joinToString(" | ")
+    }
+    val footer = if (chinese) {
+        "本报告不包含页面原文、商品名称、订单号、运单号、取件码、地址、电话或账号信息。"
+    } else {
+        "This report contains no raw page text, item name, order or tracking number, pickup code, address, phone number, or account data."
+    }
+    val columns = if (chinese) {
+        "时间 | 平台 | 应用版本 | 解析器 | 结果 | 页面 | 可见节点 | 文字节点 | 候选数"
+    } else {
+        "Time | Source | App version | Parser | Result | Page | Visible nodes | Text nodes | Candidates"
+    }
+    return "$heading\n$columns\n$records\n\n$footer"
 }
 
 @Composable

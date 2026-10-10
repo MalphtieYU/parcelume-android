@@ -5,8 +5,14 @@ import androidx.core.content.edit
 
 data class ShoppingSource(
     val packageName: String,
-    val label: String
+    val label: String,
+    val tier: ShoppingSourceTier
 )
+
+enum class ShoppingSourceTier {
+    CORE,
+    EXPERIMENTAL
+}
 
 enum class RetentionPolicy(val label: String, val days: Int?) {
     ONE_WEEK("一周", 7),
@@ -24,25 +30,25 @@ class LocalSettings(context: Context) {
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
     val availableSources = listOf(
-        ShoppingSource("com.taobao.taobao", "淘宝"),
-        ShoppingSource("com.jingdong.app.mall", "京东"),
-        ShoppingSource("com.xunmeng.pinduoduo", "拼多多"),
-        ShoppingSource("com.tmall.wireless", "天猫"),
-        ShoppingSource("com.cainiao.wireless", "菜鸟"),
-        ShoppingSource("com.sf.activity", "顺丰"),
-        ShoppingSource("com.amazon.mShop.android.shopping", "Amazon"),
-        ShoppingSource("com.einnovation.temu", "Temu"),
-        ShoppingSource("com.alibaba.aliexpresshd", "AliExpress"),
-        ShoppingSource("com.ebay.mobile", "eBay"),
-        ShoppingSource("com.walmart.android", "Walmart"),
-        ShoppingSource("com.zzkko", "SHEIN"),
-        ShoppingSource("com.etsy.android", "Etsy"),
-        ShoppingSource("com.alibaba.intl.android.apps.poseidon", "Alibaba.com"),
-        ShoppingSource("com.lazada.android", "Lazada"),
-        ShoppingSource("com.shopee.id", "Shopee Indonesia"),
-        ShoppingSource("com.flipkart.android", "Flipkart"),
-        ShoppingSource("com.mercadolibre", "Mercado Libre"),
-        ShoppingSource("jp.co.rakuten.android", "Rakuten")
+        ShoppingSource("com.taobao.taobao", "淘宝", ShoppingSourceTier.CORE),
+        ShoppingSource("com.jingdong.app.mall", "京东", ShoppingSourceTier.CORE),
+        ShoppingSource("com.xunmeng.pinduoduo", "拼多多", ShoppingSourceTier.CORE),
+        ShoppingSource("com.tmall.wireless", "天猫", ShoppingSourceTier.CORE),
+        ShoppingSource("com.cainiao.wireless", "菜鸟", ShoppingSourceTier.CORE),
+        ShoppingSource("com.sf.activity", "顺丰", ShoppingSourceTier.CORE),
+        ShoppingSource("com.amazon.mShop.android.shopping", "Amazon", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.einnovation.temu", "Temu", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.alibaba.aliexpresshd", "AliExpress", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.ebay.mobile", "eBay", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.walmart.android", "Walmart", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.zzkko", "SHEIN", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.etsy.android", "Etsy", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.alibaba.intl.android.apps.poseidon", "Alibaba.com", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.lazada.android", "Lazada", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.shopee.id", "Shopee Indonesia", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.flipkart.android", "Flipkart", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("com.mercadolibre", "Mercado Libre", ShoppingSourceTier.EXPERIMENTAL),
+        ShoppingSource("jp.co.rakuten.android", "Rakuten", ShoppingSourceTier.EXPERIMENTAL)
     )
 
     fun isSourceEnabled(packageName: String): Boolean =
@@ -106,7 +112,11 @@ class LocalSettings(context: Context) {
         }
 
     var diagnosticsEnabled: Boolean
-        get() = preferences.getBoolean(KEY_DIAGNOSTICS_ENABLED, false)
+        get() = if (preferences.contains(KEY_DIAGNOSTICS_ENABLED)) {
+            preferences.getBoolean(KEY_DIAGNOSTICS_ENABLED, true)
+        } else {
+            true
+        }
         set(value) {
             preferences.edit { putBoolean(KEY_DIAGNOSTICS_ENABLED, value) }
         }

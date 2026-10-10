@@ -9,6 +9,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.core.net.toUri
 import com.parcelinbox.app.notifications.ParcelNotificationListener
 import com.parcelinbox.app.ui.ParcelInboxApp
 import com.parcelinbox.app.ui.ParcelInboxTheme
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
                     viewModel = screenModel,
                     onOpenNotificationSettings = ::openSystemNotificationAccess,
                     onOpenScreenCaptureSettings = ::openSystemAccessibilitySettings,
+                    onOpenAppDetailsSettings = ::openAppDetailsSettings,
                     onShareCompatibilityReport = ::shareCompatibilityReport
                 )
             }
@@ -67,6 +69,17 @@ class MainActivity : ComponentActivity() {
         )
         for (intent in candidates) {
             if (runCatching { startActivity(intent) }.isSuccess) return
+        }
+    }
+
+    /** Opens Android's app-info page, where sideloaded-app restricted settings are managed. */
+    private fun openAppDetailsSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            "package:$packageName".toUri()
+        )
+        if (runCatching { startActivity(intent) }.isFailure) {
+            runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
         }
     }
 

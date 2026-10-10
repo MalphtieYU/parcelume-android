@@ -2,7 +2,7 @@
 
 [简体中文](PRIVACY.zh-CN.md) · English
 
-Parcelume 0.3.3 works without a Parcelume account or server. The current build remains offline-only.
+Parcelume 0.3.4 works without a Parcelume account or server. The current build remains offline-only.
 
 ## Shopping screen capture
 
@@ -36,7 +36,7 @@ Raw screen trees, notification bodies, screenshots, images, attachments, address
 
 ## Optional privacy-safe compatibility report
 
-Capture diagnostics are off by default. If the user enables them, Parcelume keeps only the latest diagnostic metadata on device: device model, Android version, shopping-app name and version, parser version, page kind, result code, and node/candidate counts. It contains no raw page text, item name, order or tracking number, pickup code, address, phone number, account, or payment data. Android's share sheet opens only after the user taps **Share privacy-safe report**, and the user chooses whether and where to send it.
+Privacy-safe capture diagnostics are enabled by default for new 0.3.4 installations and can be disabled at any time. Parcelume keeps at most 20 metadata entries on device: device model, Android version, shopping-app name and version, parser version, page kind, result code, and node/candidate counts. Repeated delayed samples are coalesced. The history contains no raw page text, item name, order or tracking number, pickup code, address, phone number, account, or payment data. Disabling diagnostics clears the history. Android's share sheet opens only after the user taps **Share privacy-safe report**, and the user chooses whether and where to send it.
 
 ## Network boundary
 
@@ -44,4 +44,4 @@ The current Android manifest contains no internet or network-state permission. P
 
 ## User control
 
-Users can enable multiple sources at the same time, disable any source, pause all capture immediately, hide item names, revoke in-app consent, revoke accessibility or notification access in Android settings, choose a retention period for completed records, or delete all local parcel data from Parcelume settings. `FLAG_SECURE` keeps Parcelume content out of screenshots, screen recordings, and recent-app previews.
+Users can enable multiple sources at the same time, disable any source, pause all capture immediately, hide item names, revoke in-app consent, revoke accessibility or notification access in Android settings, choose a retention period for completed records, correct or delete one parcel, safely undo parcels newly inserted by the latest capture, or delete all local parcel data. `FLAG_SECURE` keeps Parcelume content out of screenshots, screen recordings, and recent-app previews.

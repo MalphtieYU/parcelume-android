@@ -7,9 +7,14 @@ import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
+import org.json.JSONObject
 
 enum class CaptureDiagnosticCode {
     CAPTURED,
+    DUPLICATE_IGNORED,
+    ROOT_UNAVAILABLE,
+    STORAGE_ERROR,
     NO_VISIBLE_TEXT,
     UNSUPPORTED_PAGE,
     LOW_CONFIDENCE,
@@ -39,7 +44,10 @@ data class CaptureDiagnostic(
 class CaptureDiagnostics(context: Context) {
     private val appContext = context.applicationContext
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
-    private val _latest = MutableStateFlow(load())
+    private val _history = MutableStateFlow(loadHistory())
+    val history: StateFlow<List<CaptureDiagnostic>> = _history.asStateFlow()
+
+    private val _latest = MutableStateFlow(_history.value.firstOrNull())
     val latest: StateFlow<CaptureDiagnostic?> = _latest.asStateFlow()
 
     fun create(
@@ -70,45 +78,67 @@ class CaptureDiagnostics(context: Context) {
 
     @Synchronized
     fun record(diagnostic: CaptureDiagnostic) {
-        preferences.edit {
-            putLong(KEY_TIME, diagnostic.observedAt)
-            putString(KEY_SOURCE, diagnostic.sourceLabel)
-            putString(KEY_CODE, diagnostic.code.name)
-            putString(KEY_PAGE_KIND, diagnostic.pageKind)
-            putInt(KEY_VISIBLE_NODES, diagnostic.visibleNodeCount)
-            putInt(KEY_TEXT_NODES, diagnostic.textNodeCount)
-            putInt(KEY_CANDIDATES, diagnostic.candidateCount)
-            putString(KEY_DEVICE_FAMILY, diagnostic.deviceFamily)
-            putString(KEY_ANDROID_VERSION, diagnostic.androidVersion)
-            putString(KEY_SOURCE_VERSION, diagnostic.sourceVersion)
-            putString(KEY_PARSER_VERSION, diagnostic.parserVersion)
-        }
-        _latest.value = diagnostic
+        val updated = appendDiagnostic(_history.value, diagnostic)
+        preferences.edit { putString(KEY_HISTORY, encode(updated)) }
+        _history.value = updated
+        _latest.value = updated.firstOrNull()
     }
 
     @Synchronized
     fun clear() {
         preferences.edit { clear() }
+        _history.value = emptyList()
         _latest.value = null
     }
 
-    private fun load(): CaptureDiagnostic? {
-        if (!preferences.contains(KEY_TIME)) return null
-        return CaptureDiagnostic(
-            observedAt = preferences.getLong(KEY_TIME, 0L),
-            sourceLabel = preferences.getString(KEY_SOURCE, "").orEmpty(),
-            code = runCatching {
-                CaptureDiagnosticCode.valueOf(preferences.getString(KEY_CODE, "").orEmpty())
-            }.getOrDefault(CaptureDiagnosticCode.UNSUPPORTED_PAGE),
-            pageKind = preferences.getString(KEY_PAGE_KIND, "unknown").orEmpty(),
-            visibleNodeCount = preferences.getInt(KEY_VISIBLE_NODES, 0),
-            textNodeCount = preferences.getInt(KEY_TEXT_NODES, 0),
-            candidateCount = preferences.getInt(KEY_CANDIDATES, 0),
-            deviceFamily = preferences.getString(KEY_DEVICE_FAMILY, "Unknown Android device").orEmpty(),
-            androidVersion = preferences.getString(KEY_ANDROID_VERSION, "Unknown").orEmpty(),
-            sourceVersion = preferences.getString(KEY_SOURCE_VERSION, "Unknown").orEmpty(),
-            parserVersion = preferences.getString(KEY_PARSER_VERSION, ChinaPlatformRules.PARSER_VERSION).orEmpty()
-        )
+    private fun loadHistory(): List<CaptureDiagnostic> = runCatching {
+        val payload = preferences.getString(KEY_HISTORY, null) ?: return@runCatching emptyList()
+        val array = JSONArray(payload)
+        buildList {
+            for (index in 0 until minOf(array.length(), MAX_HISTORY)) {
+                val item = array.getJSONObject(index)
+                add(
+                    CaptureDiagnostic(
+                        observedAt = item.optLong("observedAt"),
+                        sourceLabel = safeMetadata(item.optString("sourceLabel")),
+                        code = runCatching {
+                            CaptureDiagnosticCode.valueOf(item.optString("code"))
+                        }.getOrDefault(CaptureDiagnosticCode.UNSUPPORTED_PAGE),
+                        pageKind = safeMetadata(item.optString("pageKind", "unknown")),
+                        visibleNodeCount = item.optInt("visibleNodeCount").coerceAtLeast(0),
+                        textNodeCount = item.optInt("textNodeCount").coerceAtLeast(0),
+                        candidateCount = item.optInt("candidateCount").coerceAtLeast(0),
+                        deviceFamily = safeMetadata(item.optString("deviceFamily", "Unknown Android device")),
+                        androidVersion = safeMetadata(item.optString("androidVersion", "Unknown")),
+                        sourceVersion = safeMetadata(item.optString("sourceVersion", "Unknown")),
+                        parserVersion = safeMetadata(
+                            item.optString("parserVersion", ChinaPlatformRules.PARSER_VERSION)
+                        )
+                    )
+                )
+            }
+        }
+    }.getOrDefault(emptyList())
+
+    private fun encode(history: List<CaptureDiagnostic>): String {
+        val array = JSONArray()
+        history.forEach { diagnostic ->
+            array.put(
+                JSONObject()
+                    .put("observedAt", diagnostic.observedAt)
+                    .put("sourceLabel", diagnostic.sourceLabel)
+                    .put("code", diagnostic.code.name)
+                    .put("pageKind", diagnostic.pageKind)
+                    .put("visibleNodeCount", diagnostic.visibleNodeCount)
+                    .put("textNodeCount", diagnostic.textNodeCount)
+                    .put("candidateCount", diagnostic.candidateCount)
+                    .put("deviceFamily", diagnostic.deviceFamily)
+                    .put("androidVersion", diagnostic.androidVersion)
+                    .put("sourceVersion", diagnostic.sourceVersion)
+                    .put("parserVersion", diagnostic.parserVersion)
+            )
+        }
+        return array.toString()
     }
 
     @Suppress("DEPRECATION")
@@ -129,16 +159,25 @@ class CaptureDiagnostics(context: Context) {
 
     private companion object {
         const val PREFERENCES_NAME = "capture_diagnostics"
-        const val KEY_TIME = "time"
-        const val KEY_SOURCE = "source"
-        const val KEY_CODE = "code"
-        const val KEY_PAGE_KIND = "page_kind"
-        const val KEY_VISIBLE_NODES = "visible_nodes"
-        const val KEY_TEXT_NODES = "text_nodes"
-        const val KEY_CANDIDATES = "candidates"
-        const val KEY_DEVICE_FAMILY = "device_family"
-        const val KEY_ANDROID_VERSION = "android_version"
-        const val KEY_SOURCE_VERSION = "source_version"
-        const val KEY_PARSER_VERSION = "parser_version"
+        const val KEY_HISTORY = "privacy_safe_history_v2"
     }
+}
+
+internal const val MAX_DIAGNOSTIC_HISTORY = 20
+private const val DIAGNOSTIC_COALESCE_MS = 2_000L
+private const val MAX_HISTORY = MAX_DIAGNOSTIC_HISTORY
+
+/** Keeps a small metadata-only ring buffer and collapses repeated delayed samples. */
+internal fun appendDiagnostic(
+    history: List<CaptureDiagnostic>,
+    incoming: CaptureDiagnostic
+): List<CaptureDiagnostic> {
+    val current = history.firstOrNull()
+    val repeatsCurrent = current != null &&
+        incoming.observedAt - current.observedAt in 0..DIAGNOSTIC_COALESCE_MS &&
+        current.sourceLabel == incoming.sourceLabel &&
+        current.code == incoming.code &&
+        current.pageKind == incoming.pageKind
+    val tail = if (repeatsCurrent) history.drop(1) else history
+    return (listOf(incoming) + tail).take(MAX_DIAGNOSTIC_HISTORY)
 }

@@ -5,8 +5,10 @@ import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.Toast
 import com.parcelinbox.app.ParcelInboxApplication
 import com.parcelinbox.app.data.ParsedParcel
+import com.parcelinbox.app.settings.AppLanguage
 import java.util.concurrent.Executors
 
 /**
@@ -45,7 +47,20 @@ class ParcelAccessibilityService : AccessibilityService() {
         if (!application.settings.hasAcceptedScreenCaptureDisclosure || application.settings.capturePaused) return
         if (!application.settings.isSourceEnabled(expectedPackage)) return
 
-        val root = rootInActiveWindow ?: return
+        val root = rootInActiveWindow
+        if (root == null) {
+            recordDiagnostic(
+                application = application,
+                observedAt = System.currentTimeMillis(),
+                sourcePackage = expectedPackage,
+                code = CaptureDiagnosticCode.ROOT_UNAVAILABLE,
+                pageKind = "unavailable",
+                visibleNodeCount = 0,
+                textNodeCount = 0,
+                candidateCount = 0
+            )
+            return
+        }
         if (root.packageName?.toString() != expectedPackage) return
 
         val observedAt = System.currentTimeMillis()
@@ -59,24 +74,88 @@ class ParcelAccessibilityService : AccessibilityService() {
             includeItemTitle = !application.settings.hideItemNames
         )
 
-        if (application.settings.diagnosticsEnabled) {
-            application.diagnostics.record(
-                application.diagnostics.create(
-                    observedAt = observedAt,
-                    sourcePackage = expectedPackage,
-                    sourceLabel = sourceLabel,
-                    code = outcome.diagnosticCode,
-                    pageKind = outcome.pageKind,
-                    visibleNodeCount = snapshot.visibleNodeCount,
-                    textNodeCount = outcome.textNodeCount,
-                    candidateCount = outcome.parcels.size
-                )
-            )
-        }
-
         val fresh = outcome.parcels.filter(::isFreshObservation)
-        if (fresh.isEmpty()) return
-        databaseExecutor.execute { application.repository.acceptAll(fresh) }
+        if (fresh.isEmpty()) {
+            val code = if (outcome.parcels.isNotEmpty()) {
+                CaptureDiagnosticCode.DUPLICATE_IGNORED
+            } else {
+                outcome.diagnosticCode
+            }
+            recordDiagnostic(
+                application = application,
+                observedAt = observedAt,
+                sourcePackage = expectedPackage,
+                code = code,
+                pageKind = outcome.pageKind,
+                visibleNodeCount = snapshot.visibleNodeCount,
+                textNodeCount = outcome.textNodeCount,
+                candidateCount = outcome.parcels.size
+            )
+            return
+        }
+        databaseExecutor.execute {
+            runCatching { application.repository.acceptAll(fresh) }
+                .onSuccess { result ->
+                    recordDiagnostic(
+                        application = application,
+                        observedAt = observedAt,
+                        sourcePackage = expectedPackage,
+                        code = CaptureDiagnosticCode.CAPTURED,
+                        pageKind = outcome.pageKind,
+                        visibleNodeCount = snapshot.visibleNodeCount,
+                        textNodeCount = outcome.textNodeCount,
+                        candidateCount = result.affectedIds.size
+                    )
+                    showCaptureToast(application, result.affectedIds.size)
+                }
+                .onFailure {
+                    recordDiagnostic(
+                        application = application,
+                        observedAt = observedAt,
+                        sourcePackage = expectedPackage,
+                        code = CaptureDiagnosticCode.STORAGE_ERROR,
+                        pageKind = outcome.pageKind,
+                        visibleNodeCount = snapshot.visibleNodeCount,
+                        textNodeCount = outcome.textNodeCount,
+                        candidateCount = fresh.size
+                    )
+                }
+        }
+    }
+
+    private fun recordDiagnostic(
+        application: ParcelInboxApplication,
+        observedAt: Long,
+        sourcePackage: String,
+        code: CaptureDiagnosticCode,
+        pageKind: String,
+        visibleNodeCount: Int,
+        textNodeCount: Int,
+        candidateCount: Int
+    ) {
+        if (!application.settings.diagnosticsEnabled) return
+        application.diagnostics.record(
+            application.diagnostics.create(
+                observedAt = observedAt,
+                sourcePackage = sourcePackage,
+                sourceLabel = application.settings.sourceLabel(sourcePackage) ?: sourcePackage,
+                code = code,
+                pageKind = pageKind,
+                visibleNodeCount = visibleNodeCount,
+                textNodeCount = textNodeCount,
+                candidateCount = candidateCount
+            )
+        )
+    }
+
+    private fun showCaptureToast(application: ParcelInboxApplication, count: Int) {
+        if (count <= 0) return
+        val message = if (application.settings.appLanguage == AppLanguage.CHINESE) {
+            "Parcelume 已整理 $count 个包裹"
+        } else {
+            "Parcelume organized $count parcel${if (count == 1) "" else "s"}"
+        }
+        mainHandler.post { Toast.makeText(application, message, Toast.LENGTH_SHORT).show() }
     }
 
     private fun isFreshObservation(parcel: ParsedParcel): Boolean {

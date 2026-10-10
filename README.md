@@ -21,6 +21,8 @@ Parcelume turns order and delivery details already visible in user-selected shop
 - **Screen shielding** — parcel details stay out of screenshots, recordings, and recent-app previews.
 - **Browse-only fallback** — the interface remains usable when access is declined.
 - **Flexible retention** — keep completed records for one week, one month, one year, or forever.
+- **Inspectable capture health** — keeps up to 20 privacy-safe result codes so a missed capture is explainable without storing order content.
+- **Local correction** — rename, change status, delete one record, or undo parcels newly inserted by the latest capture.
 - **Bilingual UI** — switch between Chinese and English without changing features or layout.
 
 ## Preview
@@ -86,13 +88,13 @@ Menu names vary across Samsung, Xiaomi, OPPO, vivo, Huawei, Honor, OnePlus, Goog
 | Sensitive pages | Payment, card, password, and verification-code screens are rejected; address, contact, authentication, and payment rows are removed before extraction |
 | Display protection | Android `FLAG_SECURE` blocks app screenshots, screen recording, and recent-app previews |
 | Other personal data | Does not read contacts, SMS, photos, location, or shopping-app credentials |
-| Deletion | User-controlled retention plus one-tap deletion of all local data |
+| Deletion | Per-parcel deletion, safe undo for the latest newly inserted capture, user-controlled retention, and one-tap deletion of all local data |
 
 See [Privacy details](docs/PRIVACY.md) for the exact boundary.
 
 ## Supported sources
 
-Version 0.3.3 pauses platform expansion and maintains independent parsing rules for Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express. It also separates multiple order cards found in one accessibility container and ignores clipped cards that expose an identifier without a status or tracking signal. Food/instant-delivery and refund, cancellation, or after-sales pages are explicitly excluded. Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba remain selectable but experimental.
+Version 0.3.4 keeps independent parsing rules for Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express and now labels them separately from experimental sources in the interface. Food/instant-delivery and refund, cancellation, or after-sales pages remain explicitly excluded. Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba remain selectable but experimental.
 
 Support means Parcelume recognizes known visible-page and notification patterns; it does not integrate with or represent these companies. Layout, wording, custom-rendered views, region, and app-version changes can reduce recognition accuracy.
 
@@ -126,7 +128,7 @@ Run verification:
 
 ## Project status
 
-Version 0.3.3 adds on-device compatibility guidance for Xiaomi/Redmi, Huawei, Honor, and Samsung plus a user-initiated privacy-safe report. The report contains only device, Android and shopping-app versions, parser version, page kind, result code, and counts—never order content. Fixtures and repeated emulator checks do not replace live-page validation; real Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express pages still need anonymized testing across app and Android-vendor versions.
+The main branch is preparing 0.3.4; the latest published APK remains 0.3.3 until the new candidate completes device testing. Version 0.3.4 adds per-source health, a 20-entry privacy-safe diagnostic ring, atomic batch writes, success feedback, per-parcel correction/deletion, safe undo for newly inserted parcels, explicit core/experimental grouping, and a shortcut to Android App info for sideloaded restricted settings. Fixtures and local checks still do not replace live-page validation.
 
 ## Contributing
 
