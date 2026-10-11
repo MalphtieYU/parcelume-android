@@ -22,6 +22,11 @@ The APK still has no internet, network-state, contacts, SMS, phone, media, broad
 - Android Lint completed successfully.
 - Debug APK assembled successfully for minSdk 26 and targetSdk 37.
 - Final APK manifest was inspected directly; only WorkManager lifecycle permissions and the AndroidX dynamic-receiver protection permission are present.
+- Android 15 emulator regression covered first launch, one-time consent, the real system accessibility flow, English/Chinese layout, local editing, single-record deletion, and reboot persistence.
+- Six local QA fixtures with fake data exercised Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express end to end. Each source created one correct record; a second pass created no duplicates.
+- A fake checkout/password page was blocked as sensitive, and its diagnostic contained metadata and counts only.
+- A read-only plaintext scan of the app sandbox found none of the fake item, order, tracking, card, or password values.
+- The candidate APK SHA-256 is `66E820044F0F44537674ABC9757A66E7BE6F5155DA466D2B1F9B0610560BB557`.
 
 ## Remaining limitation
 
@@ -53,6 +58,11 @@ APK 仍不包含联网、网络状态、联系人、短信、通话、媒体、�
 - Android Lint 检查通过。
 - Debug APK 构建成功，最低 Android 8.0，目标 API 37。
 - 已直接读取成品 APK 权限；只包含 WorkManager 生命周期权限和 AndroidX 动态接收器保护权限。
+- Android 15 模拟器已覆盖首次启动、一次性同意、真实系统辅助功能授权、中英文排版、本地修正、单条删除和重启后数据保留。
+- 使用只含假数据的本地 QA 夹具，对淘宝、京东、拼多多、天猫、菜鸟和顺丰完成端到端识别；六个平台各新增一条正确记录，第二轮没有重复入库。
+- 含假收银台、银行卡和密码字段的页面被判定为敏感页面并拒绝解析，诊断中只有元数据和计数。
+- 对 App 自身沙盒进行了只读明文扫描，没有发现假商品名、订单号、运单号、银行卡或密码字段。
+- 当前候选 APK 的 SHA-256 为 `66E820044F0F44537674ABC9757A66E7BE6F5155DA466D2B1F9B0610560BB557`。
 
 ## 仍有限制
 

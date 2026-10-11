@@ -1749,8 +1749,9 @@ private fun ParcelDetailDialog(
     onDelete: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val displayedTitle = localizedParcelTitle(parcel)
     var editing by remember(parcel.id) { mutableStateOf(false) }
-    var editedTitle by remember(parcel.id) { mutableStateOf(parcel.title) }
+    var editedTitle by remember(parcel.id, displayedTitle) { mutableStateOf(displayedTitle) }
     var editedStatus by remember(parcel.id) { mutableStateOf(parcel.status) }
     var confirmDelete by remember(parcel.id) { mutableStateOf(false) }
 
@@ -1836,7 +1837,13 @@ private fun ParcelDetailDialog(
         confirmButton = {
             if (editing) {
                 Button(
-                    onClick = { onUpdate(editedTitle.trim(), editedStatus) },
+                    onClick = {
+                        val normalizedTitle = editedTitle.trim()
+                        onUpdate(
+                            if (normalizedTitle == displayedTitle) parcel.title else normalizedTitle,
+                            editedStatus
+                        )
+                    },
                     enabled = editedTitle.isNotBlank(),
                     shape = RoundedCornerShape(22.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Ink)
@@ -1979,10 +1986,18 @@ private fun localizedSourceLabel(packageName: String, fallback: String): String 
 }
 
 @Composable
-private fun localizedParcelTitle(parcel: ParcelItem): String = when (parcel.trackingNumber) {
-    "DEMO10000001" -> tr("日常用品包裹", "Daily essentials")
-    "DEMO10000002" -> tr("数码配件", "Tech accessories")
-    "DEMO10000003" -> tr("家居用品", "Home goods")
+private fun localizedParcelTitle(parcel: ParcelItem): String = when {
+    parcel.title == "${parcel.sourceLabel} 包裹" || parcel.title == "${parcel.sourceLabel} 订单" -> {
+        val source = localizedSourceLabel(parcel.sourcePackage, parcel.sourceLabel)
+        tr("$source 包裹", "$source parcel")
+    }
+    parcel.title == "受保护的包裹" -> tr("受保护的包裹", "Protected parcel")
+    parcel.captureMethod == CaptureMethod.DEMO && parcel.title == "日常用品包裹" ->
+        tr("日常用品包裹", "Daily essentials")
+    parcel.captureMethod == CaptureMethod.DEMO && parcel.title == "数码配件" ->
+        tr("数码配件", "Tech accessories")
+    parcel.captureMethod == CaptureMethod.DEMO && parcel.title == "家居用品" ->
+        tr("家居用品", "Home goods")
     else -> parcel.title
 }
 
@@ -2025,9 +2040,10 @@ private fun CaptureDiagnostic.localizedSummary(): String {
         "unavailable" -> tr("页面尚未就绪", "page not ready")
         else -> tr("未知页面", "unknown page")
     }
+    val source = localizedDiagnosticSourceLabel(sourceLabel)
     return tr(
-        "$time · $sourceLabel $sourceVersion\n$result · $kind · 可见节点 $visibleNodeCount · 文字 $textNodeCount · 候选 $candidateCount\n$deviceFamily · $androidVersion · $parserVersion",
-        "$time · $sourceLabel $sourceVersion\n$result · $kind · $visibleNodeCount visible nodes · $textNodeCount text nodes · $candidateCount candidates\n$deviceFamily · $androidVersion · $parserVersion"
+        "$time · $source $sourceVersion\n$result · $kind · 可见节点 $visibleNodeCount · 文字 $textNodeCount · 候选 $candidateCount\n$deviceFamily · $androidVersion · $parserVersion",
+        "$time · $source $sourceVersion\n$result · $kind · $visibleNodeCount visible nodes · $textNodeCount text nodes · $candidateCount candidates\n$deviceFamily · $androidVersion · $parserVersion"
     )
 }
 
@@ -2038,7 +2054,18 @@ private fun CaptureDiagnostic.localizedCompactSummary(): String {
     } else {
         SimpleDateFormat("MMM d HH:mm:ss", Locale.ENGLISH).format(Date(observedAt))
     }
-    return "$time · $sourceLabel · ${localizedResultLabel()}"
+    return "$time · ${localizedDiagnosticSourceLabel(sourceLabel)} · ${localizedResultLabel()}"
+}
+
+@Composable
+private fun localizedDiagnosticSourceLabel(sourceLabel: String): String = when (sourceLabel) {
+    "淘宝" -> tr("淘宝", "Taobao")
+    "京东" -> tr("京东", "JD")
+    "拼多多" -> tr("拼多多", "Pinduoduo")
+    "天猫" -> tr("天猫", "Tmall")
+    "菜鸟" -> tr("菜鸟", "Cainiao")
+    "顺丰" -> tr("顺丰", "SF Express")
+    else -> sourceLabel
 }
 
 @Composable
