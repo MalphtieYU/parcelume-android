@@ -1,6 +1,7 @@
 package com.parcelinbox.app.settings
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.core.content.edit
 
 data class ShoppingSource(
@@ -57,6 +58,21 @@ class LocalSettings(context: Context) {
     fun setSourceEnabled(packageName: String, enabled: Boolean) {
         preferences.edit { putBoolean("source.$packageName", enabled) }
     }
+
+    fun enabledSourcePackages(): Set<String> = availableSources.asSequence()
+        .map(ShoppingSource::packageName)
+        .filter(::isSourceEnabled)
+        .toSet()
+
+    fun registerChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun unregisterChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        preferences.unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun isSourceSettingKey(key: String?): Boolean = key?.startsWith(SOURCE_KEY_PREFIX) == true
 
     fun sourceLabel(packageName: String): String? =
         availableSources.firstOrNull { it.packageName == packageName }?.label
@@ -133,5 +149,6 @@ class LocalSettings(context: Context) {
         const val KEY_CAPTURE_PAUSED = "capture_paused"
         const val KEY_HIDE_ITEM_NAMES = "hide_item_names"
         const val KEY_DIAGNOSTICS_ENABLED = "diagnostics_enabled"
+        const val SOURCE_KEY_PREFIX = "source."
     }
 }

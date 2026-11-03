@@ -9,6 +9,9 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.net.toUri
 import com.parcelinbox.app.notifications.ParcelNotificationListener
 import com.parcelinbox.app.ui.ParcelInboxApp
@@ -16,12 +19,14 @@ import com.parcelinbox.app.ui.ParcelInboxTheme
 
 class MainActivity : ComponentActivity() {
     private val screenModel by viewModels<MainViewModel>()
+    private var pendingImportText by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Parcel details can contain pickup codes and order references. Keep
         // them out of screenshots, screen recordings and recent-app previews.
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        pendingImportText = consumeSharedText(intent)
         setContent {
             ParcelInboxTheme {
                 ParcelInboxApp(
@@ -29,10 +34,34 @@ class MainActivity : ComponentActivity() {
                     onOpenNotificationSettings = ::openSystemNotificationAccess,
                     onOpenScreenCaptureSettings = ::openSystemAccessibilitySettings,
                     onOpenAppDetailsSettings = ::openAppDetailsSettings,
-                    onShareCompatibilityReport = ::shareCompatibilityReport
+                    onShareCompatibilityReport = ::shareCompatibilityReport,
+                    pendingImportText = pendingImportText,
+                    onOpenManualImport = { pendingImportText = "" },
+                    onDismissManualImport = { pendingImportText = null }
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        val sharedText = consumeSharedText(intent)
+        setIntent(intent)
+        sharedText?.let { pendingImportText = it }
+    }
+
+    private fun consumeSharedText(intent: Intent?): String? {
+        val text = if (
+            intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true
+        ) {
+            intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.takeIf(String::isNotBlank)
+        } else {
+            null
+        }
+        // Do not retain imported raw text in the Activity's task Intent after
+        // copying it into the short-lived Compose state for user review.
+        intent?.removeExtra(Intent.EXTRA_TEXT)
+        return text
     }
 
     /**

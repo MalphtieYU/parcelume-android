@@ -88,6 +88,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.parcelinbox.app.MainViewModel
+import com.parcelinbox.app.ManualImportResult
 import com.parcelinbox.app.R
 import com.parcelinbox.app.SourceChoice
 import com.parcelinbox.app.BuildConfig
@@ -135,7 +136,10 @@ fun ParcelInboxApp(
     onOpenNotificationSettings: () -> Unit,
     onOpenScreenCaptureSettings: () -> Unit,
     onOpenAppDetailsSettings: () -> Unit,
-    onShareCompatibilityReport: (String) -> Unit
+    onShareCompatibilityReport: (String) -> Unit,
+    pendingImportText: String?,
+    onOpenManualImport: () -> Unit,
+    onDismissManualImport: () -> Unit
 ) {
     val onboardingComplete by viewModel.hasCompletedOnboarding.collectAsState()
     val permissionIntroComplete by viewModel.hasCompletedPermissionIntro.collectAsState()
@@ -176,7 +180,10 @@ fun ParcelInboxApp(
                     onOpenNotificationSettings = onOpenNotificationSettings,
                     onOpenScreenCaptureSettings = onOpenScreenCaptureSettings,
                     onOpenAppDetailsSettings = onOpenAppDetailsSettings,
-                    onShareCompatibilityReport = onShareCompatibilityReport
+                    onShareCompatibilityReport = onShareCompatibilityReport,
+                    pendingImportText = pendingImportText,
+                    onOpenManualImport = onOpenManualImport,
+                    onDismissManualImport = onDismissManualImport
                 )
             }
         }
@@ -690,7 +697,10 @@ private fun MainShell(
     onOpenNotificationSettings: () -> Unit,
     onOpenScreenCaptureSettings: () -> Unit,
     onOpenAppDetailsSettings: () -> Unit,
-    onShareCompatibilityReport: (String) -> Unit
+    onShareCompatibilityReport: (String) -> Unit,
+    pendingImportText: String?,
+    onOpenManualImport: () -> Unit,
+    onDismissManualImport: () -> Unit
 ) {
     val parcels by viewModel.parcels.collectAsState()
     val hasAccess by viewModel.hasNotificationAccess.collectAsState()
@@ -743,6 +753,7 @@ private fun MainShell(
                         else destination = Destination.SETTINGS
                     },
                     onOpenSettings = { destination = Destination.SETTINGS },
+                    onOpenManualImport = onOpenManualImport,
                     onOpenAll = { destination = Destination.PARCELS },
                     onSelectParcel = { selectedParcel = it }
                 )
@@ -809,6 +820,14 @@ private fun MainShell(
             onDismiss = { selectedParcel = null }
         )
     }
+
+    pendingImportText?.let { initialText ->
+        ManualImportDialog(
+            initialText = initialText,
+            onImport = viewModel::importSharedText,
+            onDismiss = onDismissManualImport
+        )
+    }
 }
 
 @Composable
@@ -866,6 +885,7 @@ private fun HomeScreen(
     onOpenScreenCaptureSettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenManualImport: () -> Unit,
     onOpenAll: () -> Unit,
     onSelectParcel: (ParcelItem) -> Unit
 ) {
@@ -925,6 +945,35 @@ private fun HomeScreen(
                         else -> onOpenNotificationSettings
                     }
                 )
+            }
+        }
+
+
+        item {
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenManualImport),
+                shape = RoundedCornerShape(22.dp),
+                color = Mint
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(tr("主动导入包裹", "Import a parcel"), fontWeight = FontWeight.Black)
+                        Text(
+                            tr(
+                                "粘贴或从购物软件分享订单/物流文字，不需要后台读取权限",
+                                "Paste or share order and delivery text without background access"
+                            ),
+                            color = Muted,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+                    }
+                    BlackDot(text = "+")
+                }
             }
         }
 
@@ -1629,8 +1678,8 @@ private fun SettingsScreen(
         item {
             Text(
                 tr(
-                    "Parcelume 0.3.4 仍不申请网络权限。原文只在内存中解析，结构化敏感字段加密保存在本机；当前尚不提供实时联网物流查询。",
-                    "Parcelume 0.3.4 still has no network permission. Raw text is parsed in memory and structured sensitive fields are encrypted locally; live carrier lookup is not available yet."
+                    "Parcelume 0.3.5 仍不申请网络权限。原文只在内存中解析，结构化敏感字段加密保存在本机；当前尚不提供实时联网物流查询。",
+                    "Parcelume 0.3.5 still has no network permission. Raw text is parsed in memory and structured sensitive fields are encrypted locally; live carrier lookup is not available yet."
                 ),
                 color = Muted,
                 fontSize = 12.sp,
@@ -1742,6 +1791,106 @@ private fun SettingSwitchRow(title: String, checked: Boolean, onCheckedChange: (
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
+private fun ManualImportDialog(
+    initialText: String,
+    onImport: (String) -> ManualImportResult,
+    onDismiss: () -> Unit
+) {
+    var text by remember(initialText) { mutableStateOf(initialText) }
+    var errorCode by remember { mutableStateOf<CaptureDiagnosticCode?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("主动导入包裹", "Import a parcel"), fontWeight = FontWeight.Black) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    tr(
+                        "粘贴订单详情或物流文字，也可以在购物软件的分享菜单中选择 Parcelume。原文只在本次解析期间存在，不会保存。",
+                        "Paste order or delivery text, or share text to Parcelume from a shopping app. The original text is used only for this import and is not stored."
+                    ),
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                Surface(
+                    modifier = Modifier.fillMaxWidth().height(164.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0xFFF2F1F3)
+                ) {
+                    BasicTextField(
+                        value = text,
+                        onValueChange = {
+                            text = it.take(24_000)
+                            errorCode = null
+                        },
+                        modifier = Modifier.fillMaxSize().padding(14.dp),
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+                        decorationBox = { inner ->
+                            if (text.isBlank()) {
+                                Text(
+                                    tr(
+                                        "例如：订单号、运单号、当前物流状态……",
+                                        "For example: order number, tracking number and current status…"
+                                    ),
+                                    color = Muted,
+                                    fontSize = 13.sp
+                                )
+                            }
+                            inner()
+                        }
+                    )
+                }
+                errorCode?.let { code ->
+                    Text(
+                        when (code) {
+                            CaptureDiagnosticCode.SENSITIVE_PAGE_BLOCKED -> tr(
+                                "检测到付款、密码或验证内容，已拒绝导入。请只复制订单或物流信息。",
+                                "Payment, password or verification content was detected and rejected. Share order or delivery details only."
+                            )
+                            CaptureDiagnosticCode.FOOD_OR_INSTANT_DELIVERY_BLOCKED -> tr(
+                                "这是外卖或即时配送内容，当前版本不会导入。",
+                                "Food or instant-delivery content is not imported in this version."
+                            )
+                            CaptureDiagnosticCode.AFTER_SALES_PAGE_BLOCKED -> tr(
+                                "这是退款、取消或售后内容，当前版本不会导入。",
+                                "Refund, cancellation or after-sales content is not imported in this version."
+                            )
+                            CaptureDiagnosticCode.NO_VISIBLE_TEXT -> tr(
+                                "请先粘贴订单或物流文字。",
+                                "Paste order or delivery text first."
+                            )
+                            else -> tr(
+                                "没有找到足够可靠的订单或物流字段。请包含订单号或运单号，以及当前物流状态。",
+                                "No reliable parcel fields were found. Include an order or tracking number and the current delivery status."
+                            )
+                        },
+                        color = MaterialTheme.colorScheme.error,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = text.isNotBlank(),
+                onClick = {
+                    val result = onImport(text)
+                    if (result.importedCount > 0) onDismiss() else errorCode = result.diagnosticCode
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Ink)
+            ) {
+                Text(tr("本地导入", "Import locally"))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(tr("取消", "Cancel"), color = Muted) }
+        }
+    )
+}
+
+@Composable
 private fun ParcelDetailDialog(
     parcel: ParcelItem,
     onMarkCompleted: () -> Unit,
@@ -1821,6 +1970,7 @@ private fun ParcelDetailDialog(
                         when (parcel.captureMethod) {
                             CaptureMethod.SCREEN -> tr("识别方式：购物页面", "Captured from: shopping screen")
                             CaptureMethod.NOTIFICATION -> tr("识别方式：通知辅助", "Captured from: notification backup")
+                            CaptureMethod.MANUAL -> tr("识别方式：主动导入", "Captured from: manual import")
                             CaptureMethod.DEMO -> tr("识别方式：演示数据", "Captured from: demo data")
                         },
                         color = Muted,

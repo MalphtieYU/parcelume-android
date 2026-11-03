@@ -8,6 +8,8 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import com.parcelinbox.app.capture.ParcelAccessibilityService
 import com.parcelinbox.app.capture.CaptureDiagnostic
+import com.parcelinbox.app.capture.CaptureDiagnosticCode
+import com.parcelinbox.app.capture.ManualImportParser
 import com.parcelinbox.app.data.CaptureMethod
 import com.parcelinbox.app.data.ParcelItem
 import com.parcelinbox.app.data.ParcelStatus
@@ -22,6 +24,11 @@ import kotlinx.coroutines.flow.asStateFlow
 data class SourceChoice(
     val source: ShoppingSource,
     val enabled: Boolean
+)
+
+data class ManualImportResult(
+    val importedCount: Int,
+    val diagnosticCode: CaptureDiagnosticCode
 )
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -111,6 +118,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun undoLastCapture(): Int = app.repository.undoLastCapture()
 
     fun deleteAll() = app.repository.deleteAll()
+
+    fun importSharedText(rawText: String): ManualImportResult {
+        val outcome = ManualImportParser.parse(
+            rawText = rawText,
+            genericSourceLabel = if (app.settings.appLanguage == AppLanguage.CHINESE) {
+                "手动导入"
+            } else {
+                "Manual import"
+            },
+            includeItemTitle = !app.settings.hideItemNames
+        )
+        if (outcome.parcels.isEmpty()) {
+            return ManualImportResult(0, outcome.diagnosticCode)
+        }
+        val result = app.repository.acceptAll(outcome.parcels)
+        return ManualImportResult(result.affectedIds.size, outcome.diagnosticCode)
+    }
 
     fun completeOnboarding() {
         app.settings.hasCompletedOnboarding = true

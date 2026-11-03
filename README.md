@@ -12,6 +12,7 @@ Parcelume turns order and delivery details already visible in user-selected shop
 ## Highlights
 
 - **Automatic while shopping** — extracts useful fields when a supported order or delivery page is visible.
+- **Permission-free fallback** — paste order text or share text into Parcelume when a page exposes no readable accessibility content.
 - **Notification backup** — notification access is optional rather than the only data source.
 - **Encrypted local storage** — sensitive parcel fields are encrypted with non-exportable Android Keystore keys.
 - **No internet permission** — the current build cannot upload notification or parcel data.
@@ -45,6 +46,8 @@ Encrypted structured fields in SQLite
 Parcelume timeline and pickup view
 ```
 
+Text that the user explicitly pastes or shares follows the same on-device parser and encrypted-storage path without accessibility or notification access.
+
 Parcelume may extract the source, optional item title, order reference, delivery status, tracking number, pickup code, and update time. Raw screen and notification text is processed in memory and is not stored. Payment or credential screens are rejected, sensitive rows are removed before extraction, and stored private fields are encrypted locally. The service does not click, scroll, type, perform gestures, or take screenshots.
 
 ## Download the preview
@@ -60,6 +63,7 @@ Download [`parcelume-0.3.3-debug.apk`](https://github.com/MalphtieYU/parcelume-a
 5. Parcelume opens Android's real Accessibility settings. Select Parcelume and grant access there, then return.
 6. Open an order confirmation, order detail, or delivery page in a selected app. Matching fields are captured locally.
 7. Optionally enable notification access as a backup source.
+8. If a protected or custom-rendered page is missed, copy its order or delivery text and use **Import a parcel**, or share the text directly to Parcelume. Review the result before relying on it.
 
 If you choose **Not now — browse only**, Parcelume opens normally and keeps a visible reminder until screen capture and at least one source are enabled.
 
@@ -80,12 +84,13 @@ Menu names vary across Samsung, Xiaomi, OPPO, vivo, Huawei, Honor, OnePlus, Goog
 | --- | --- |
 | Network | No `INTERNET` or `ACCESS_NETWORK_STATE` permission |
 | Accounts | No Parcelume account, login, or cloud sync |
-| Screen scope | Android grants broad accessibility access; Parcelume filters by a fixed supported-package list plus the user's selected sources before parsing visible text |
+| Screen scope | Android grants broad accessibility access; Parcelume dynamically asks Android for only the sources currently enabled by the user, then rechecks the event and active-window package before parsing |
 | Screen actions | No clicks, gestures, scrolling, typing, overlays, or screenshots |
 | Notification scope | Optional backup; unselected packages are ignored before notification fields are parsed |
 | Stored data | Parsed parcel fields only; no raw screen tree, notification body, screenshots, or attachments |
 | At-rest protection | Item titles, order references, tracking numbers, and pickup codes use randomized AES-GCM encryption backed by Android Keystore; keyed fingerprints support local matching without searchable plaintext |
-| Sensitive pages | Payment, card, password, and verification-code screens are rejected; address, contact, authentication, and payment rows are removed before extraction |
+| Sensitive pages | Payment, card, password, and verification-code screens are rejected; editable and Android-marked sensitive nodes are skipped; address, contact, authentication, and payment rows are removed before extraction |
+| Manual import | Only text explicitly pasted or shared by the user is processed; raw input stays in memory and only recognized parcel fields can be saved |
 | Display protection | Android `FLAG_SECURE` blocks app screenshots, screen recording, and recent-app previews |
 | Other personal data | Does not read contacts, SMS, photos, location, or shopping-app credentials |
 | Deletion | Per-parcel deletion, safe undo for the latest newly inserted capture, user-controlled retention, and one-tap deletion of all local data |
@@ -94,7 +99,7 @@ See [Privacy details](docs/PRIVACY.md) for the exact boundary.
 
 ## Supported sources
 
-Version 0.3.4 keeps independent parsing rules for Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express and now labels them separately from experimental sources in the interface. Food/instant-delivery and refund, cancellation, or after-sales pages remain explicitly excluded. Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba remain selectable but experimental.
+Version 0.3.5 keeps independent parsing rules for Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express and labels them separately from experimental sources in the interface. Food/instant-delivery and refund, cancellation, or after-sales pages remain explicitly excluded. Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba remain selectable but experimental.
 
 Support means Parcelume recognizes known visible-page and notification patterns; it does not integrate with or represent these companies. Layout, wording, custom-rendered views, region, and app-version changes can reduce recognition accuracy.
 
@@ -128,7 +133,7 @@ Run verification:
 
 ## Project status
 
-The main branch is preparing 0.3.4; the latest published APK remains 0.3.3 until the new candidate completes device testing. Version 0.3.4 adds per-source health, a 20-entry privacy-safe diagnostic ring, atomic batch writes, success feedback, per-parcel correction/deletion, safe undo for newly inserted parcels, explicit core/experimental grouping, and a shortcut to Android App info for sideloaded restricted settings. Fixtures and local checks still do not replace live-page validation.
+The main branch is preparing 0.3.5; the latest published APK remains 0.3.3 until the new candidate completes device testing. Version 0.3.5 adds an explicit paste/share fallback, narrows Android event delivery to the sources currently enabled by the user, skips editable and Android-marked sensitive nodes, and moves parsing and database work off the accessibility callback thread. Fixtures and local checks still do not replace live-page validation.
 
 ## Contributing
 

@@ -33,6 +33,7 @@ fun resolveParcelStatus(existing: ParcelStatus?, incoming: ParcelStatus): Parcel
 enum class CaptureMethod {
     SCREEN,
     NOTIFICATION,
+    MANUAL,
     DEMO
 }
 

@@ -1,6 +1,8 @@
 package com.parcelinbox.app.capture
 
 import android.accessibilityservice.AccessibilityService
+import android.content.SharedPreferences
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.view.accessibility.AccessibilityEvent
@@ -21,6 +23,21 @@ class ParcelAccessibilityService : AccessibilityService() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val lastScheduledAt = HashMap<String, Long>()
     private val recentFingerprints = LinkedHashMap<String, Long>()
+    private val pendingSamples = ArrayList<Runnable>(SAMPLE_DELAYS_MS.size)
+    @Volatile private var sampleGeneration = 0L
+    private val settingsChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        val application = applicationContext as? ParcelInboxApplication ?: return@OnSharedPreferenceChangeListener
+        if (application.settings.isSourceSettingKey(key)) {
+            mainHandler.post(::refreshPackageFilter)
+        }
+    }
+
+    override fun onServiceConnected() {
+        super.onServiceConnected()
+        val application = applicationContext as ParcelInboxApplication
+        application.settings.registerChangeListener(settingsChangeListener)
+        refreshPackageFilter()
+    }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val currentEvent = event ?: return
@@ -37,12 +54,45 @@ class ParcelAccessibilityService : AccessibilityService() {
         if (now - previousSchedule < SCHEDULE_DEBOUNCE_MS) return
         lastScheduledAt[packageName] = now
 
+        scheduleSamples(packageName)
+    }
+
+    private fun scheduleSamples(packageName: String) {
+        cancelPendingSamples()
+        val generation = sampleGeneration
         SAMPLE_DELAYS_MS.forEach { delay ->
-            mainHandler.postDelayed({ captureVisiblePage(packageName) }, delay)
+            lateinit var sample: Runnable
+            sample = Runnable {
+                pendingSamples.remove(sample)
+                if (generation == sampleGeneration) captureVisiblePage(packageName, generation)
+            }
+            pendingSamples += sample
+            mainHandler.postDelayed(sample, delay)
         }
     }
 
-    private fun captureVisiblePage(expectedPackage: String) {
+    private fun cancelPendingSamples() {
+        sampleGeneration += 1L
+        pendingSamples.forEach(mainHandler::removeCallbacks)
+        pendingSamples.clear()
+    }
+
+    /**
+     * Ask Android to deliver events only for sources the user has enabled.
+     * The sentinel avoids a null/empty package filter being interpreted as
+     * "all packages" on vendor-modified Android builds.
+     */
+    private fun refreshPackageFilter() {
+        val application = applicationContext as ParcelInboxApplication
+        cancelPendingSamples()
+        val enabled = application.settings.enabledSourcePackages().sorted()
+        val updated = serviceInfo
+        updated.packageNames = (enabled.ifEmpty { listOf(DISABLED_PACKAGE_SENTINEL) }).toTypedArray()
+        setServiceInfo(updated)
+    }
+
+    private fun captureVisiblePage(expectedPackage: String, generation: Long) {
+        if (generation != sampleGeneration) return
         val application = applicationContext as ParcelInboxApplication
         if (!application.settings.hasAcceptedScreenCaptureDisclosure || application.settings.capturePaused) return
         if (!application.settings.isSourceEnabled(expectedPackage)) return
@@ -66,34 +116,41 @@ class ParcelAccessibilityService : AccessibilityService() {
         val observedAt = System.currentTimeMillis()
         val snapshot = collectVisibleSnapshot(root)
         val sourceLabel = application.settings.sourceLabel(expectedPackage) ?: expectedPackage
-        val outcome = ParcelScreenParser.parseSnapshot(
-            sourcePackage = expectedPackage,
-            sourceLabel = sourceLabel,
-            snapshot = snapshot,
-            observedAt = observedAt,
-            includeItemTitle = !application.settings.hideItemNames
-        )
-
-        val fresh = outcome.parcels.filter(::isFreshObservation)
-        if (fresh.isEmpty()) {
-            val code = if (outcome.parcels.isNotEmpty()) {
-                CaptureDiagnosticCode.DUPLICATE_IGNORED
-            } else {
-                outcome.diagnosticCode
-            }
-            recordDiagnostic(
-                application = application,
-                observedAt = observedAt,
-                sourcePackage = expectedPackage,
-                code = code,
-                pageKind = outcome.pageKind,
-                visibleNodeCount = snapshot.visibleNodeCount,
-                textNodeCount = outcome.textNodeCount,
-                candidateCount = outcome.parcels.size
-            )
-            return
-        }
+        val includeItemTitle = !application.settings.hideItemNames
         databaseExecutor.execute {
+            if (generation != sampleGeneration) return@execute
+            if (!application.settings.hasAcceptedScreenCaptureDisclosure || application.settings.capturePaused) {
+                return@execute
+            }
+            if (!application.settings.isSourceEnabled(expectedPackage)) return@execute
+
+            val outcome = ParcelScreenParser.parseSnapshot(
+                sourcePackage = expectedPackage,
+                sourceLabel = sourceLabel,
+                snapshot = snapshot,
+                observedAt = observedAt,
+                includeItemTitle = includeItemTitle
+            )
+            val fresh = outcome.parcels.filter(::isFreshObservation)
+            if (fresh.isEmpty()) {
+                val code = if (outcome.parcels.isNotEmpty()) {
+                    CaptureDiagnosticCode.DUPLICATE_IGNORED
+                } else {
+                    outcome.diagnosticCode
+                }
+                recordDiagnostic(
+                    application = application,
+                    observedAt = observedAt,
+                    sourcePackage = expectedPackage,
+                    code = code,
+                    pageKind = outcome.pageKind,
+                    visibleNodeCount = snapshot.visibleNodeCount,
+                    textNodeCount = outcome.textNodeCount,
+                    candidateCount = outcome.parcels.size
+                )
+                return@execute
+            }
+
             runCatching { application.repository.acceptAll(fresh) }
                 .onSuccess { result ->
                     recordDiagnostic(
@@ -181,8 +238,13 @@ class ParcelAccessibilityService : AccessibilityService() {
         fun visit(node: AccessibilityNodeInfo, depth: Int): List<String> {
             if (visited >= MAX_NODES || depth > MAX_DEPTH || !node.isVisibleToUser) return emptyList()
             visited += 1
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && node.isAccessibilityDataSensitive) {
+                return emptyList()
+            }
             val lines = ArrayList<String>(16)
-            if (!node.isPassword) {
+            // Never inspect the value of an input field. Order and tracking
+            // labels remain available on surrounding non-editable text nodes.
+            if (!node.isPassword && !node.isEditable) {
                 node.text?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(lines::add)
                 node.contentDescription?.toString()?.trim()?.takeIf { it.isNotBlank() }?.let(lines::add)
             }
@@ -218,6 +280,9 @@ class ParcelAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        val application = applicationContext as? ParcelInboxApplication
+        application?.settings?.unregisterChangeListener(settingsChangeListener)
+        cancelPendingSamples()
         mainHandler.removeCallbacksAndMessages(null)
         databaseExecutor.shutdown()
         super.onDestroy()
@@ -242,5 +307,6 @@ class ParcelAccessibilityService : AccessibilityService() {
         const val MIN_BLOCK_LINES = 2
         const val MAX_BLOCK_LINES = 100
         const val MAX_BLOCKS = 36
+        const val DISABLED_PACKAGE_SENTINEL = "com.parcelume.no.enabled.sources"
     }
 }

@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged|typeViewScrolled"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
     android:canPerformGestures="false"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_service_description"
+    android:isAccessibilityTool="false"
+    tools:targetApi="s"
     android:notificationTimeout="500"
     android:packageNames="com.taobao.taobao,com.jingdong.app.mall,com.xunmeng.pinduoduo,com.tmall.wireless,com.cainiao.wireless,com.sf.activity,com.amazon.mShop.android.shopping,com.einnovation.temu,com.alibaba.aliexpresshd,com.ebay.mobile,com.walmart.android,com.zzkko,com.etsy.android,com.alibaba.intl.android.apps.poseidon,com.lazada.android,com.shopee.id,com.flipkart.android,com.mercadolibre,jp.co.rakuten.android"
     android:settingsActivity="com.parcelinbox.app.MainActivity" />

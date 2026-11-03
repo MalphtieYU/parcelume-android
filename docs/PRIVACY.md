@@ -2,7 +2,7 @@
 
 [简体中文](PRIVACY.zh-CN.md) · English
 
-Parcelume 0.3.4 works without a Parcelume account or server. The current build remains offline-only.
+Parcelume 0.3.5 works without a Parcelume account or server. The current build remains offline-only.
 
 ## Shopping screen capture
 
@@ -10,15 +10,21 @@ Android exposes accessibility-service access as a broad and sensitive system cap
 
 Parcelume narrows its actual behavior in code:
 
-1. The foreground app must belong to Parcelume's fixed supported-package list.
-2. The app must also be explicitly enabled by the user inside Parcelume.
+1. Android event delivery is dynamically narrowed to the source packages currently enabled by the user; if none are enabled, a non-existent sentinel package prevents vendor builds from interpreting an empty list as “all apps.”
+2. The foreground app must belong to Parcelume's supported-package list and be explicitly enabled by the user inside Parcelume.
 3. The event package and active-window package must match.
-4. Password nodes are skipped.
+4. Password fields, all editable nodes, and nodes marked accessibility-sensitive by Android 14+ are skipped before text collection.
 5. Payment, card, password, and verification-code screens are rejected; address, contact, authentication, and payment rows are removed before extraction.
 6. Deterministic local rules require order or delivery evidence before creating a record.
 7. Raw window text is discarded after parsing; only extracted parcel fields reach the encrypted database.
 
 The service does not click, scroll, type, perform gestures, draw overlays, take screenshots, navigate another app, or submit information on the user's behalf.
+
+Parsing and database writes run on a dedicated single-thread executor instead of blocking the accessibility event callback. Delayed samples are cancelled when the source selection changes, the service stops, or a newer page event replaces them.
+
+## Explicit manual import
+
+The user can paste order or delivery text into Parcelume or share plain text to it through Android's share sheet. This fallback does not need accessibility or notification access. The original input is bounded, processed only in memory, checked by the same sensitive-page rejection and parcel-evidence rules, and discarded after the operation. Only recognized structured parcel fields can reach the encrypted database. Parcelume never reads the clipboard automatically.
 
 ## Optional notification backup
 
@@ -36,7 +42,7 @@ Raw screen trees, notification bodies, screenshots, images, attachments, address
 
 ## Optional privacy-safe compatibility report
 
-Privacy-safe capture diagnostics are enabled by default for new 0.3.4 installations and can be disabled at any time. Parcelume keeps at most 20 metadata entries on device: device model, Android version, shopping-app name and version, parser version, page kind, result code, and node/candidate counts. Repeated delayed samples are coalesced. The history contains no raw page text, item name, order or tracking number, pickup code, address, phone number, account, or payment data. Disabling diagnostics clears the history. Android's share sheet opens only after the user taps **Share privacy-safe report**, and the user chooses whether and where to send it.
+Privacy-safe capture diagnostics are enabled by default for new 0.3.5 installations and can be disabled at any time. Parcelume keeps at most 20 metadata entries on device: device model, Android version, shopping-app name and version, parser version, page kind, result code, and node/candidate counts. Repeated delayed samples are coalesced. The history contains no raw page text, item name, order or tracking number, pickup code, address, phone number, account, or payment data. Disabling diagnostics clears the history. Android's share sheet opens only after the user taps **Share privacy-safe report**, and the user chooses whether and where to send it.
 
 ## Network boundary
 
