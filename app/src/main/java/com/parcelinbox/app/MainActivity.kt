@@ -54,7 +54,14 @@ class MainActivity : ComponentActivity() {
         val text = if (
             intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true
         ) {
-            intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.takeIf(String::isNotBlank)
+            intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.let { shared ->
+                val bounded = if (shared.length > MAX_SHARED_TEXT_CHARS) {
+                    shared.subSequence(0, MAX_SHARED_TEXT_CHARS).toString()
+                } else {
+                    shared.toString()
+                }
+                bounded.takeIf(String::isNotBlank)
+            }
         } else {
             null
         }
@@ -62,6 +69,12 @@ class MainActivity : ComponentActivity() {
         // copying it into the short-lived Compose state for user review.
         intent?.removeExtra(Intent.EXTRA_TEXT)
         return text
+    }
+
+    private companion object {
+        // Preserve one character beyond the parser limit so an oversized
+        // share is rejected instead of silently accepted after truncation.
+        const val MAX_SHARED_TEXT_CHARS = 24_001
     }
 
     /**

@@ -52,7 +52,7 @@ Parcelume may extract the source, optional item title, order reference, delivery
 
 ## Download the preview
 
-Download [`parcelume-0.3.3-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.3-preview) from the 0.3.3 preview release. This is a debug-signed evaluation build, not a production Play Store build; review the limitations below before granting system access. SHA-256: `6D41CB828088A0308FB1F5F859482F9C870A2627787AB7B08C3AF2315753D7AE`.
+Download [`parcelume-0.3.5-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.5-preview) from the 0.3.5 preview release. This is a debug-signed evaluation build, not a production Play Store build; review the limitations below before granting system access. SHA-256: `27B04C7F559EF9294EA8147CDA7B871C520BA28D5B969E0458663FA09E24EBEF`.
 
 ## Quick start
 
@@ -133,7 +133,7 @@ Run verification:
 
 ## Project status
 
-The main branch is preparing 0.3.5; the latest published APK remains 0.3.3 until the new candidate completes device testing. Version 0.3.5 adds an explicit paste/share fallback, narrows Android event delivery to the sources currently enabled by the user, skips editable and Android-marked sensitive nodes, and moves parsing and database work off the accessibility callback thread. Fixtures and local checks still do not replace live-page validation.
+Version 0.3.5 is the latest preview. It adds an explicit paste/share fallback, narrows Android event delivery to the sources currently enabled by the user, skips editable and Android-marked sensitive nodes, rejects oversized shared input, and moves parsing and database work off the accessibility callback thread. It passed repeated local unit, lint, build, permission, and signature checks; the debug build still requires privacy-safe validation on real devices and live shopping-app pages.
 
 ## Contributing
 

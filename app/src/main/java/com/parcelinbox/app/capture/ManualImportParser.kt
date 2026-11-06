@@ -20,6 +20,9 @@ object ManualImportParser {
         includeItemTitle: Boolean,
         observedAt: Long = System.currentTimeMillis()
     ): ManualImportOutcome {
+        if (rawText.length > MAX_IMPORT_LENGTH) {
+            return ManualImportOutcome(emptyList(), CaptureDiagnosticCode.LOW_CONFIDENCE)
+        }
         val lines = rawText.lineSequence()
             .map(String::trim)
             .filter(String::isNotBlank)
@@ -30,7 +33,7 @@ object ManualImportParser {
             return ManualImportOutcome(emptyList(), CaptureDiagnosticCode.NO_VISIBLE_TEXT)
         }
 
-        val normalizedText = lines.joinToString("\n").take(MAX_IMPORT_LENGTH)
+        val normalizedText = lines.joinToString("\n")
         val source = SOURCE_HINTS.firstOrNull { hint ->
             hint.markers.any { normalizedText.contains(it, ignoreCase = true) }
         }

@@ -52,7 +52,7 @@ Parcelume 可能提取来源、可选商品标题、订单号、物流状态、�
 
 ## 下载测试版
 
-从 [`v0.3.3-preview`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.3-preview) 下载 `parcelume-0.3.3-debug.apk`。这是用于体验和验证的调试签名版本，不是应用商店正式版本；开启系统权限前请先阅读下方限制。SHA-256：`6D41CB828088A0308FB1F5F859482F9C870A2627787AB7B08C3AF2315753D7AE`。
+从 [`v0.3.5-preview`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.5-preview) 下载 `parcelume-0.3.5-debug.apk`。这是用于体验和验证的调试签名版本，不是应用商店正式版本；开启系统权限前请先阅读下方限制。SHA-256：`27B04C7F559EF9294EA8147CDA7B871C520BA28D5B969E0458663FA09E24EBEF`。
 
 ## 使用方法
 
@@ -133,7 +133,7 @@ APK 生成位置：`app/build/outputs/apk/debug/app-debug.apk`。
 
 ## 项目状态
 
-主分支正在准备 0.3.5；在新候选包完成真机测试前，GitHub 最新公开 APK 仍是 0.3.3。0.3.5 新增明确的粘贴/分享兜底入口，把 Android 事件投递范围动态收窄到用户当前开启的平台，跳过可编辑节点和 Android 标记的敏感节点，并把解析与数据库处理移出辅助功能回调线程。固定样本和本机检查仍不能替代真实页面测试。
+0.3.5 是当前最新预览版。它新增明确的粘贴/分享兜底入口，把 Android 事件投递范围动态收窄到用户当前开启的平台，跳过可编辑节点和 Android 标记的敏感节点，拒绝超长共享内容，并把解析与数据库处理移出辅助功能回调线程。该调试版本已经重复通过本地单元测试、Lint、构建、权限和签名检查，但仍需要在真实设备和购物平台真实页面上进行脱敏验证。
 
 ## 参与贡献
 

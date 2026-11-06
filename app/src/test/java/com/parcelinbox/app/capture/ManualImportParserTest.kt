@@ -63,4 +63,17 @@ class ManualImportParserTest {
         assertTrue(outcome.parcels.isEmpty())
         assertEquals(CaptureDiagnosticCode.UNSUPPORTED_PAGE, outcome.diagnosticCode)
     }
+
+    @Test
+    fun rejectsOversizedSharedTextInsteadOfParsingATruncatedPrefix() {
+        val validPrefix = "京东订单号：JD202611030001\n配送单号：JDVA202611030001\n运输中\n"
+        val outcome = ManualImportParser.parse(
+            rawText = validPrefix + "x".repeat(24_001),
+            genericSourceLabel = "手动导入",
+            includeItemTitle = true
+        )
+
+        assertTrue(outcome.parcels.isEmpty())
+        assertEquals(CaptureDiagnosticCode.LOW_CONFIDENCE, outcome.diagnosticCode)
+    }
 }
