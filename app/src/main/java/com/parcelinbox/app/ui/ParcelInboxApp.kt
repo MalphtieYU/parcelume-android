@@ -43,6 +43,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -95,7 +96,11 @@ import com.parcelinbox.app.BuildConfig
 import com.parcelinbox.app.capture.AndroidVendorFamily
 import com.parcelinbox.app.capture.CaptureDiagnostic
 import com.parcelinbox.app.capture.CaptureDiagnosticCode
+import com.parcelinbox.app.capture.CompatibilityReportBuilder
 import com.parcelinbox.app.capture.DeviceCompatibility
+import com.parcelinbox.app.capture.DeviceTestBlocker
+import com.parcelinbox.app.capture.DeviceTestReadiness
+import com.parcelinbox.app.capture.DeviceTestReportContext
 import com.parcelinbox.app.data.CaptureMethod
 import com.parcelinbox.app.data.ParcelItem
 import com.parcelinbox.app.data.ParcelStatus
@@ -1373,6 +1378,15 @@ private fun SettingsScreen(
     var confirmPrivacyConsent by remember { mutableStateOf(false) }
     var permissionTarget by remember { mutableStateOf("screen") }
     var showExperimentalSources by remember { mutableStateOf(false) }
+    var showDeviceTestGuide by remember { mutableStateOf(false) }
+    var selectedTestSourcePackage by remember {
+        mutableStateOf(
+            sources.firstOrNull { it.source.tier == ShoppingSourceTier.CORE && it.enabled }
+                ?.source?.packageName
+                ?: sources.firstOrNull { it.source.tier == ShoppingSourceTier.CORE }?.source?.packageName.orEmpty()
+        )
+    }
+    var deviceTestStartedAt by remember { mutableStateOf<Long?>(null) }
     val deviceInfo = remember { DeviceCompatibility.current() }
     val chinese = LocalAppLanguage.current == AppLanguage.CHINESE
 
@@ -1558,6 +1572,19 @@ private fun SettingsScreen(
 
         item {
             SettingsSection(title = tr("测试与数据", "Testing & data")) {
+                SettingActionRow(
+                    title = tr("真机测试向导", "On-device test guide"),
+                    subtitle = tr(
+                        "按固定步骤验证所选平台，并生成不含订单内容的脱敏报告",
+                        "Verify one source step by step and create a report without order content"
+                    ),
+                    action = tr("开始", "Start"),
+                    onClick = {
+                        deviceTestStartedAt = null
+                        showDeviceTestGuide = true
+                    }
+                )
+                HorizontalDivider(color = Color(0xFFF0EDF1))
                 Text(
                     tr("重点平台识别健康检查", "Core-source capture health"),
                     fontWeight = FontWeight.Bold,
@@ -1652,7 +1679,11 @@ private fun SettingsScreen(
                         )
                     }
                     if (diagnosticHistory.isNotEmpty()) {
-                        val report = diagnosticHistory.compatibilityReport(chinese)
+                        val report = CompatibilityReportBuilder.build(
+                            history = diagnosticHistory,
+                            chinese = chinese,
+                            appVersion = BuildConfig.VERSION_NAME
+                        )
                         TextButton(onClick = { onShareCompatibilityReport(report) }) {
                             Text(tr("分享脱敏兼容报告", "Share privacy-safe report"), color = Ink)
                         }
@@ -1678,8 +1709,8 @@ private fun SettingsScreen(
         item {
             Text(
                 tr(
-                    "Parcelume 0.3.5 仍不申请网络权限。原文只在内存中解析，结构化敏感字段加密保存在本机；当前尚不提供实时联网物流查询。",
-                    "Parcelume 0.3.5 still has no network permission. Raw text is parsed in memory and structured sensitive fields are encrypted locally; live carrier lookup is not available yet."
+                    "Parcelume ${BuildConfig.VERSION_NAME} 仍不申请网络权限。原文只在内存中解析，结构化敏感字段加密保存在本机；当前尚不提供实时联网物流查询。",
+                    "Parcelume ${BuildConfig.VERSION_NAME} still has no network permission. Raw text is parsed in memory and structured sensitive fields are encrypted locally; live carrier lookup is not available yet."
                 ),
                 color = Muted,
                 fontSize = 12.sp,
@@ -1717,6 +1748,38 @@ private fun SettingsScreen(
         )
     }
 
+    if (showDeviceTestGuide) {
+        DeviceTestGuideDialog(
+            sources = sources.filter { it.source.tier == ShoppingSourceTier.CORE },
+            selectedSourcePackage = selectedTestSourcePackage,
+            diagnosticsEnabled = diagnosticsEnabled,
+            hasAcceptedPrivacyDisclosure = hasAcceptedPrivacyDisclosure,
+            hasScreenCaptureAccess = hasScreenCaptureAccess,
+            capturePaused = capturePaused,
+            diagnosticHistory = diagnosticHistory,
+            startedAt = deviceTestStartedAt,
+            onSelectSource = {
+                selectedTestSourcePackage = it
+                deviceTestStartedAt = null
+            },
+            onEnableDiagnostics = { onSetDiagnosticsEnabled(true) },
+            onEnableSource = { onToggleSource(it, true) },
+            onResumeCapture = { onSetCapturePaused(false) },
+            onReviewAccess = {
+                showDeviceTestGuide = false
+                if (hasAcceptedPrivacyDisclosure) {
+                    onOpenScreenCaptureSettings()
+                } else {
+                    permissionTarget = "screen"
+                    confirmPrivacyConsent = true
+                }
+            },
+            onStartTest = { deviceTestStartedAt = System.currentTimeMillis() },
+            onShareReport = onShareCompatibilityReport,
+            onDismiss = { showDeviceTestGuide = false }
+        )
+    }
+
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -1734,6 +1797,179 @@ private fun SettingsScreen(
                 TextButton(onClick = { confirmDelete = false }) { Text(tr("取消", "Cancel")) }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DeviceTestGuideDialog(
+    sources: List<SourceChoice>,
+    selectedSourcePackage: String,
+    diagnosticsEnabled: Boolean,
+    hasAcceptedPrivacyDisclosure: Boolean,
+    hasScreenCaptureAccess: Boolean,
+    capturePaused: Boolean,
+    diagnosticHistory: List<CaptureDiagnostic>,
+    startedAt: Long?,
+    onSelectSource: (String) -> Unit,
+    onEnableDiagnostics: () -> Unit,
+    onEnableSource: (String) -> Unit,
+    onResumeCapture: () -> Unit,
+    onReviewAccess: () -> Unit,
+    onStartTest: () -> Unit,
+    onShareReport: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val selected = sources.firstOrNull { it.source.packageName == selectedSourcePackage }
+        ?: sources.firstOrNull()
+    if (selected == null) return
+    val readiness = DeviceTestReadiness(
+        diagnosticsEnabled = diagnosticsEnabled,
+        sourceEnabled = selected.enabled,
+        consentAccepted = hasAcceptedPrivacyDisclosure,
+        systemAccessEnabled = hasScreenCaptureAccess,
+        capturePaused = capturePaused
+    )
+    val sessionDiagnostics = if (startedAt == null) {
+        emptyList()
+    } else {
+        diagnosticHistory.filter {
+            it.observedAt >= startedAt && it.sourceLabel == selected.source.label
+        }
+    }
+    val latestSessionResult = sessionDiagnostics.firstOrNull()
+    val chinese = LocalAppLanguage.current == AppLanguage.CHINESE
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(tr("真机识别测试", "On-device capture test"), fontWeight = FontWeight.Black) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    tr(
+                        "选择一个平台，每轮只测试订单列表、订单详情或物流详情。不要进入付款、密码或验证码页面。",
+                        "Choose one source and test only an order list, order detail or tracking page. Never open payment, password or verification-code pages for testing."
+                    ),
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    sources.forEach { choice ->
+                        FilterChip(
+                            selected = choice.source.packageName == selected.source.packageName,
+                            onClick = { onSelectSource(choice.source.packageName) },
+                            label = { Text(localizedSourceLabel(choice.source.packageName, choice.source.label)) },
+                            border = null
+                        )
+                    }
+                }
+                TestGuideStep(
+                    number = "1",
+                    title = tr("开启脱敏诊断", "Enable privacy-safe diagnostics"),
+                    body = tr("只记录设备、版本、页面类型、节点数和结果代码。", "Records device, versions, page type, node counts and result code only."),
+                    complete = diagnosticsEnabled
+                )
+                TestGuideStep(
+                    number = "2",
+                    title = tr("启用所选平台", "Enable the selected source"),
+                    body = localizedSourceLabel(selected.source.packageName, selected.source.label),
+                    complete = selected.enabled
+                )
+                TestGuideStep(
+                    number = "3",
+                    title = tr("确认系统页面识别可用", "Confirm system capture access"),
+                    body = tr("需要隐私同意、Android 辅助功能已开启且识别未暂停。", "Consent and Android accessibility access are required, and capture must not be paused."),
+                    complete = hasAcceptedPrivacyDisclosure && hasScreenCaptureAccess && !capturePaused
+                )
+                TestGuideStep(
+                    number = "4",
+                    title = tr("开始计时后打开真实页面", "Open a real page after starting"),
+                    body = tr("前往所选购物应用，依次查看一个未完成订单和它的物流详情，然后返回。无需重新下单。", "In the selected shopping app, view one unfinished order and its tracking details, then return. No new purchase is needed."),
+                    complete = startedAt != null
+                )
+                TestGuideStep(
+                    number = "5",
+                    title = tr("检查本轮结果", "Check this run"),
+                    body = latestSessionResult?.localizedSummary()
+                        ?: tr("本轮还没有收到诊断结果。返回后通常会自动刷新。", "No diagnostic result has arrived for this run yet. It normally refreshes automatically when you return."),
+                    complete = latestSessionResult != null
+                )
+                if (latestSessionResult != null) {
+                    val report = CompatibilityReportBuilder.build(
+                        history = sessionDiagnostics,
+                        chinese = chinese,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        testContext = DeviceTestReportContext(
+                            sourceLabel = selected.source.label,
+                            startedAt = startedAt ?: 0L,
+                            readiness = readiness
+                        )
+                    )
+                    TextButton(onClick = { onShareReport(report) }) {
+                        Text(tr("分享本轮脱敏报告", "Share this privacy-safe report"), color = Ink)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    when (readiness.blockers.firstOrNull()) {
+                        DeviceTestBlocker.DIAGNOSTICS_DISABLED -> onEnableDiagnostics()
+                        DeviceTestBlocker.SOURCE_DISABLED -> onEnableSource(selected.source.packageName)
+                        DeviceTestBlocker.CONSENT_REQUIRED,
+                        DeviceTestBlocker.SYSTEM_ACCESS_OFF -> onReviewAccess()
+                        DeviceTestBlocker.CAPTURE_PAUSED -> onResumeCapture()
+                        null -> onStartTest()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Ink)
+            ) {
+                Text(
+                    when (readiness.blockers.firstOrNull()) {
+                        DeviceTestBlocker.DIAGNOSTICS_DISABLED -> tr("开启脱敏诊断", "Enable diagnostics")
+                        DeviceTestBlocker.SOURCE_DISABLED -> tr("启用这个平台", "Enable this source")
+                        DeviceTestBlocker.CONSENT_REQUIRED -> tr("阅读隐私说明", "Review privacy notice")
+                        DeviceTestBlocker.SYSTEM_ACCESS_OFF -> tr("打开系统设置", "Open system settings")
+                        DeviceTestBlocker.CAPTURE_PAUSED -> tr("继续自动识别", "Resume capture")
+                        null -> if (startedAt == null) tr("开始本轮测试", "Start this run") else tr("重新开始计时", "Restart timer")
+                    }
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(tr("完成", "Done"), color = Muted) }
+        }
+    )
+}
+
+@Composable
+private fun TestGuideStep(number: String, title: String, body: String, complete: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Surface(
+            modifier = Modifier.size(28.dp),
+            shape = CircleShape,
+            color = if (complete) Color(0xFFDDEFE5) else Color(0xFFF1EEF0)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(if (complete) "✓" else number, fontSize = 12.sp, fontWeight = FontWeight.Black)
+            }
+        }
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+            Text(body, color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
+        }
     }
 }
 
@@ -2231,49 +2467,6 @@ private fun CaptureDiagnostic.localizedResultLabel(): String = when (code) {
         CaptureDiagnosticCode.FOOD_OR_INSTANT_DELIVERY_BLOCKED -> tr("外卖页已忽略", "Food page ignored")
         CaptureDiagnosticCode.AFTER_SALES_PAGE_BLOCKED -> tr("售后页已忽略", "After-sales page ignored")
     }
-
-private fun List<CaptureDiagnostic>.compatibilityReport(chinese: Boolean): String {
-    val latest = firstOrNull()
-    val heading = if (chinese) {
-        """Parcelume 脱敏兼容性报告
-Parcelume 版本：${BuildConfig.VERSION_NAME}
-设备：${latest?.deviceFamily ?: "Unknown"}
-系统：${latest?.androidVersion ?: "Unknown"}
-记录数量：$size
-"""
-    } else {
-        """Parcelume privacy-safe compatibility report
-Parcelume version: ${BuildConfig.VERSION_NAME}
-Device: ${latest?.deviceFamily ?: "Unknown"}
-System: ${latest?.androidVersion ?: "Unknown"}
-Record count: $size
-"""
-    }
-    val records = joinToString("\n") { item ->
-        listOf(
-            item.observedAt,
-            item.sourceLabel,
-            item.sourceVersion,
-            item.parserVersion,
-            item.code.name,
-            item.pageKind,
-            item.visibleNodeCount,
-            item.textNodeCount,
-            item.candidateCount
-        ).joinToString(" | ")
-    }
-    val footer = if (chinese) {
-        "本报告不包含页面原文、商品名称、订单号、运单号、取件码、地址、电话或账号信息。"
-    } else {
-        "This report contains no raw page text, item name, order or tracking number, pickup code, address, phone number, or account data."
-    }
-    val columns = if (chinese) {
-        "时间 | 平台 | 应用版本 | 解析器 | 结果 | 页面 | 可见节点 | 文字节点 | 候选数"
-    } else {
-        "Time | Source | App version | Parser | Result | Page | Visible nodes | Text nodes | Candidates"
-    }
-    return "$heading\n$columns\n$records\n\n$footer"
-}
 
 @Composable
 private fun AndroidVendorFamily.localizedCompatibilityAdvice(): String = when (this) {

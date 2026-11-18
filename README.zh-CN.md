@@ -23,6 +23,7 @@ Parcelume 会把用户所选购物应用当前页面上已经显示的订单与�
 - **仅浏览模式**：拒绝授权后仍可查看界面，同时持续显示权限提醒。
 - **保留时间可选**：已完成记录可保留一周、一个月、一年或永久。
 - **识别状态可检查**：最多保留 20 条脱敏结果代码，漏识别时可以判断原因，但不保存订单内容。
+- **真机测试向导**：自动检查必要设置，每轮只测一个平台，只生成不含订单内容的元数据报告。
 - **本地纠错**：可以改名、修改状态、删除单条记录，或撤销最近一次识别新插入的包裹。
 - **中英文界面**：只切换语言，不改变功能和设计。
 
@@ -52,7 +53,7 @@ Parcelume 可能提取来源、可选商品标题、订单号、物流状态、�
 
 ## 下载测试版
 
-从 [`v0.3.5-preview`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.5-preview) 下载 `parcelume-0.3.5-debug.apk`。这是用于体验和验证的调试签名版本，不是应用商店正式版本；开启系统权限前请先阅读下方限制。SHA-256：`27B04C7F559EF9294EA8147CDA7B871C520BA28D5B969E0458663FA09E24EBEF`。
+从 [`v0.3.6-preview`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.6-preview) 下载 `parcelume-0.3.6-debug.apk`。这是用于体验和验证的调试签名版本，不是应用商店正式版本；开启系统权限前请先阅读下方限制。SHA-256：`82F09E403CE44238969103C5B9C7F0893FA1A45D75C18EC5D3496F6CB92966CC`。
 
 ## 使用方法
 
@@ -99,7 +100,7 @@ Parcelume 可能提取来源、可选商品标题、订单号、物流状态、�
 
 ## 当前支持来源
 
-0.3.5 继续为淘宝、京东、拼多多、天猫、菜鸟和顺丰维护独立识别规则，并在界面中把它们与实验性来源分开显示。外卖/即时配送以及退款、取消和售后页面仍会被明确排除。Amazon、Temu、AliExpress、eBay、Walmart、SHEIN、Etsy、Alibaba.com、Lazada、Shopee Indonesia、Flipkart、Mercado Libre 和日本乐天市场仍保留在可选来源中，但目前属于实验性兼容。
+0.3.6 继续为淘宝、京东、拼多多、天猫、菜鸟和顺丰维护独立识别规则，并在界面中把它们与实验性来源分开显示。外卖/即时配送以及退款、取消和售后页面仍会被明确排除。Amazon、Temu、AliExpress、eBay、Walmart、SHEIN、Etsy、Alibaba.com、Lazada、Shopee Indonesia、Flipkart、Mercado Libre 和日本乐天市场仍保留在可选来源中，但目前属于实验性兼容。
 
 “支持”表示 Parcelume 可以识别已知页面和通知格式，并不表示本项目与这些公司存在合作或代表关系。页面布局、文案、自定义渲染方式、地区和版本变化都会影响准确率。
 
@@ -128,16 +129,17 @@ APK 生成位置：`app/build/outputs/apk/debug/app-debug.apk`。
 运行测试与检查：
 
 ```bash
-./gradlew testDebugUnitTest lintDebug
+./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+./gradlew pixel2Api35DebugAndroidTest
 ```
 
 ## 项目状态
 
-0.3.5 是当前最新预览版。它新增明确的粘贴/分享兜底入口，把 Android 事件投递范围动态收窄到用户当前开启的平台，跳过可编辑节点和 Android 标记的敏感节点，拒绝超长共享内容，并把解析与数据库处理移出辅助功能回调线程。该调试版本已经重复通过本地单元测试、Lint、构建、权限和签名检查，但仍需要在真实设备和购物平台真实页面上进行脱敏验证。
+0.3.6 是当前最新预览版。它新增逐项检查设置、每轮只测一个平台的真机测试向导，以及仅包含元数据的单轮报告；GitHub CI 也新增 Android 15 界面与安全测试。本地已通过 50 项单元测试、3 项 Android 15 设备测试、零错误 Lint、APK 签名验证，以及“不含联网和网络状态权限”的 Manifest 检查。购物应用真实页面仍必须通过实体设备进行脱敏验证。
 
 ## 参与贡献
 
-欢迎提交 Issue 和 Pull Request，尤其是脱敏后的通知格式说明、解析器测试和设备兼容性反馈。请勿公开真实运单号、取件码、地址、电话号码或完整通知内容。
+欢迎提交 Issue 和 Pull Request，尤其是脱敏结果代码、解析器测试和设备兼容性反馈。请使用[受引导的问题反馈表](https://github.com/MalphtieYU/parcelume-android/issues/new?template=bug_report.yml)，不要公开包含真实商品名称、订单号、运单号、取件码、地址、电话、账号或支付信息的截图与文字。
 
 ## 开源许可
 

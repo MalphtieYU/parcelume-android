@@ -1,0 +1,92 @@
+name: Privacy-safe compatibility report / 脱敏兼容性反馈
+description: Report a missed or inaccurate capture without sharing order content / 不提交订单内容的问题反馈
+title: "[Compatibility] "
+labels:
+  - compatibility
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for testing Parcelume. Never attach shopping-app screenshots or paste page/notification text.
+
+        感谢测试 Parcelume。请勿上传购物应用截图，也不要粘贴页面或通知原文。
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check / 隐私检查
+      options:
+        - label: I removed all item names, order/tracking numbers, pickup codes, addresses, phone numbers, accounts, and payment details. / 我已移除商品名称、订单号、运单号、取件码、地址、电话、账号和支付信息。
+          required: true
+        - label: I did not attach a shopping-app screenshot or raw page/notification text. / 我没有上传购物应用截图或页面、通知原文。
+          required: true
+  - type: input
+    id: app_version
+    attributes:
+      label: Parcelume version / Parcelume 版本
+      placeholder: 0.3.6
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version / 手机与 Android 版本
+      placeholder: Redmi K60 Pro, Android 15
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Tested source / 测试平台
+      options:
+        - Taobao / 淘宝
+        - JD / 京东
+        - Pinduoduo / 拼多多
+        - Tmall / 天猫
+        - Cainiao / 菜鸟
+        - SF Express / 顺丰
+    validations:
+      required: true
+  - type: dropdown
+    id: page
+    attributes:
+      label: Page type / 页面类型
+      options:
+        - Order list / 订单列表
+        - Order detail / 订单详情
+        - Tracking detail / 物流详情
+        - Unknown / 不清楚
+    validations:
+      required: true
+  - type: input
+    id: result_code
+    attributes:
+      label: Privacy-safe result code / 脱敏结果代码
+      description: Copy only the result code from the in-app device-test report. / 只填写应用内真机测试报告中的结果代码。
+      placeholder: CAPTURED or NO_PARCEL_EVIDENCE
+    validations:
+      required: true
+  - type: dropdown
+    id: behavior
+    attributes:
+      label: What happened? / 出现的问题
+      options:
+        - Nothing was captured / 没有识别
+        - Fields were inaccurate / 字段不准确
+        - Duplicate record / 重复记录
+        - Status did not update / 状态未更新
+        - App or service stopped / 应用或服务停止
+        - Other metadata-only issue / 其他不含隐私的问题
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional metadata-only notes / 其他脱敏说明
+      description: Do not include copied page text, notification text, screenshots, or identifiers. / 不要包含页面原文、通知原文、截图或任何身份标识。
+      placeholder: Reproduced twice after reopening the tracking page; result code stayed NO_PARCEL_EVIDENCE.
+  - type: checkboxes
+    id: repeat
+    attributes:
+      label: Reproduction / 复现情况
+      options:
+        - label: I repeated the same one-source test at least twice. / 我已对同一平台重复测试至少两次。

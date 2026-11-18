@@ -25,7 +25,7 @@ internal data class PlatformRule(
  * app from silently changing the behavior of the other core apps.
  */
 internal object ChinaPlatformRules {
-    const val PARSER_VERSION = "CN-0.3.5-1"
+    const val PARSER_VERSION = "CN-0.3.6-1"
 
     private val rules = listOf(
         PlatformRule(

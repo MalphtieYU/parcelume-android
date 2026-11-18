@@ -2,7 +2,7 @@
 
 [简体中文](PRIVACY.zh-CN.md) · English
 
-Parcelume 0.3.5 works without a Parcelume account or server. The current build remains offline-only.
+Parcelume 0.3.6 works without a Parcelume account or server. The current build remains offline-only.
 
 ## Shopping screen capture
 
@@ -42,7 +42,7 @@ Raw screen trees, notification bodies, screenshots, images, attachments, address
 
 ## Optional privacy-safe compatibility report
 
-Privacy-safe capture diagnostics are enabled by default for new 0.3.5 installations and can be disabled at any time. Parcelume keeps at most 20 metadata entries on device: device model, Android version, shopping-app name and version, parser version, page kind, result code, and node/candidate counts. Repeated delayed samples are coalesced. The history contains no raw page text, item name, order or tracking number, pickup code, address, phone number, account, or payment data. Disabling diagnostics clears the history. Android's share sheet opens only after the user taps **Share privacy-safe report**, and the user chooses whether and where to send it.
+Privacy-safe capture diagnostics are enabled by default for new 0.3.6 installations and can be disabled at any time. Parcelume keeps at most 20 metadata entries on device: device model, Android version, shopping-app name and version, parser version, page kind, result code, and node/candidate counts. Repeated delayed samples are coalesced. The guided device-test flow can add only the selected source, local start time, and readiness result to the report; it does not grant access or capture a page by itself. The history and report contain no raw page text, item name, order or tracking number, pickup code, address, phone number, account, or payment data. Disabling diagnostics clears the history. Android's share sheet opens only after the user taps **Share privacy-safe report**, and the user chooses whether and where to send it.
 
 ## Network boundary
 

@@ -23,6 +23,7 @@ Parcelume turns order and delivery details already visible in user-selected shop
 - **Browse-only fallback** — the interface remains usable when access is declined.
 - **Flexible retention** — keep completed records for one week, one month, one year, or forever.
 - **Inspectable capture health** — keeps up to 20 privacy-safe result codes so a missed capture is explainable without storing order content.
+- **Guided device testing** — checks the required settings, times one source at a time, and shares only a metadata-only report.
 - **Local correction** — rename, change status, delete one record, or undo parcels newly inserted by the latest capture.
 - **Bilingual UI** — switch between Chinese and English without changing features or layout.
 
@@ -52,7 +53,7 @@ Parcelume may extract the source, optional item title, order reference, delivery
 
 ## Download the preview
 
-Download [`parcelume-0.3.5-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.5-preview) from the 0.3.5 preview release. This is a debug-signed evaluation build, not a production Play Store build; review the limitations below before granting system access. SHA-256: `27B04C7F559EF9294EA8147CDA7B871C520BA28D5B969E0458663FA09E24EBEF`.
+Download [`parcelume-0.3.6-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.6-preview) from the 0.3.6 preview release. This is a debug-signed evaluation build, not a production Play Store build; review the limitations below before granting system access. SHA-256: `82F09E403CE44238969103C5B9C7F0893FA1A45D75C18EC5D3496F6CB92966CC`.
 
 ## Quick start
 
@@ -99,7 +100,7 @@ See [Privacy details](docs/PRIVACY.md) for the exact boundary.
 
 ## Supported sources
 
-Version 0.3.5 keeps independent parsing rules for Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express and labels them separately from experimental sources in the interface. Food/instant-delivery and refund, cancellation, or after-sales pages remain explicitly excluded. Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba remain selectable but experimental.
+Version 0.3.6 keeps independent parsing rules for Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express and labels them separately from experimental sources in the interface. Food/instant-delivery and refund, cancellation, or after-sales pages remain explicitly excluded. Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba remain selectable but experimental.
 
 Support means Parcelume recognizes known visible-page and notification patterns; it does not integrate with or represent these companies. Layout, wording, custom-rendered views, region, and app-version changes can reduce recognition accuracy.
 
@@ -128,16 +129,17 @@ The APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 Run verification:
 
 ```bash
-./gradlew testDebugUnitTest lintDebug
+./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+./gradlew pixel2Api35DebugAndroidTest
 ```
 
 ## Project status
 
-Version 0.3.5 is the latest preview. It adds an explicit paste/share fallback, narrows Android event delivery to the sources currently enabled by the user, skips editable and Android-marked sensitive nodes, rejects oversized shared input, and moves parsing and database work off the accessibility callback thread. It passed repeated local unit, lint, build, permission, and signature checks; the debug build still requires privacy-safe validation on real devices and live shopping-app pages.
+Version 0.3.6 is the latest preview. It adds a guided, one-source-at-a-time real-device test flow, a per-run metadata-only report, and Android 15 UI/security tests in CI. Local verification passed 50 unit tests, 3 Android 15 instrumentation tests, Lint with zero errors, APK signature verification, and a manifest check confirming that no internet or network-state permission is present. Real shopping-app layouts still require privacy-safe validation on physical devices.
 
 ## Contributing
 
-Issues and pull requests are welcome, especially anonymized notification-format reports, parser tests, and device-compatibility findings. Never post real tracking numbers, pickup codes, addresses, phone numbers, or complete notification content.
+Issues and pull requests are welcome, especially privacy-safe result codes, parser tests, and device-compatibility findings. Use the [guided bug report](https://github.com/MalphtieYU/parcelume-android/issues/new?template=bug_report.yml) and never post screenshots or text containing real item names, order or tracking numbers, pickup codes, addresses, phone numbers, accounts, or payment details.
 
 ## License
 
