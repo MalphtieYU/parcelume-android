@@ -63,8 +63,7 @@ object ParcelNotificationParser {
         val status = detectStatus(combined)
         val order = orderReference.find(combined)?.groupValues?.getOrNull(1)
         val tracking = labelledTrackingNumber.find(combined)?.groupValues?.getOrNull(1)
-            ?: commonTrackingNumber.findAll(combined).map { it.value }
-                .firstOrNull { !it.equals(order, ignoreCase = true) }
+            ?: findUnlabelledTrackingNumber(combined.lineSequence().toList(), order)
         val code = pickupCode.find(combined)?.groupValues?.getOrNull(1)
         if (order == null && tracking == null && code == null) return null
 
@@ -98,6 +97,18 @@ object ParcelNotificationParser {
     private fun containsAny(content: String, vararg words: String): Boolean =
         words.any { content.contains(it, ignoreCase = true) }
 
+    private fun findUnlabelledTrackingNumber(lines: List<String>, order: String?): String? {
+        lines.forEachIndexed { index, line ->
+            val window = lines.subList(maxOf(0, index - 1), minOf(lines.size, index + 2)).joinToString(" ")
+            if (trackingContextWords.none { window.contains(it, ignoreCase = true) }) return@forEachIndexed
+            if (promotionCodeWords.any { line.contains(it, ignoreCase = true) }) return@forEachIndexed
+            commonTrackingNumber.findAll(line).map { it.value }.firstOrNull {
+                !it.equals(order, ignoreCase = true)
+            }?.let { return it }
+        }
+        return null
+    }
+
     private fun displayTitle(title: String, text: String, sourceLabel: String): String {
         val genericTitles = setOf("物流通知", "订单通知", "服务通知", sourceLabel)
         if (title.isNotBlank() && title !in genericTitles && isSafeTitle(title)) {
@@ -108,6 +119,14 @@ object ParcelNotificationParser {
         }?.take(80)
             ?: "$sourceLabel 包裹"
     }
+
+    private val trackingContextWords = listOf(
+        "运单", "快递", "物流", "包裹", "配送", "派送", "追踪", "tracking", "shipment",
+        "delivery", "seguimiento", "rastreio", "resi", "追跡"
+    )
+    private val promotionCodeWords = listOf(
+        "优惠码", "活动码", "兑换码", "会员码", "商品编码", "sku", "coupon", "promo", "offer code"
+    )
 
     private fun isSafeTitle(value: String): Boolean {
         // Tracking identifiers commonly contain a long numeric run. Remove only

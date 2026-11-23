@@ -8,6 +8,7 @@ import java.util.concurrent.Executors
 
 class ParcelNotificationListener : NotificationListenerService() {
     private val databaseExecutor = Executors.newSingleThreadExecutor()
+    @Volatile private var destroyed = false
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
         val application = applicationContext as ParcelInboxApplication
@@ -24,13 +25,15 @@ class ParcelNotificationListener : NotificationListenerService() {
             extras.getCharSequence(Notification.EXTRA_SUB_TEXT)
         ).filterNotNull().joinToString("\n") { it.toString() }
 
-        val parsed = ParcelNotificationParser.parse(
-            sourcePackage = packageName,
-            sourceLabel = application.settings.sourceLabel(packageName) ?: packageName,
-            notificationTitle = title,
-            notificationText = text,
-            observedAt = sbn.postTime
-        ) ?: return
+        val parsed = runCatching {
+            ParcelNotificationParser.parse(
+                sourcePackage = packageName,
+                sourceLabel = application.settings.sourceLabel(packageName) ?: packageName,
+                notificationTitle = title,
+                notificationText = text,
+                observedAt = sbn.postTime
+            )
+        }.getOrNull() ?: return
 
         val privacySafe = if (application.settings.hideItemNames) {
             parsed.copy(title = "${parsed.sourceLabel} 包裹")
@@ -38,12 +41,16 @@ class ParcelNotificationListener : NotificationListenerService() {
             parsed
         }
 
-        databaseExecutor.execute {
-            application.repository.accept(privacySafe)
+        if (destroyed) return
+        runCatching {
+            databaseExecutor.execute {
+                if (!destroyed) runCatching { application.repository.accept(privacySafe) }
+            }
         }
     }
 
     override fun onDestroy() {
+        destroyed = true
         databaseExecutor.shutdown()
         super.onDestroy()
     }

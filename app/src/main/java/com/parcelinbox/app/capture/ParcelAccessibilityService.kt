@@ -25,6 +25,7 @@ class ParcelAccessibilityService : AccessibilityService() {
     private val recentFingerprints = LinkedHashMap<String, Long>()
     private val pendingSamples = ArrayList<Runnable>(SAMPLE_DELAYS_MS.size)
     @Volatile private var sampleGeneration = 0L
+    @Volatile private var destroyed = false
     private val settingsChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         val application = applicationContext as? ParcelInboxApplication ?: return@OnSharedPreferenceChangeListener
         if (application.settings.isSourceSettingKey(key)) {
@@ -117,42 +118,56 @@ class ParcelAccessibilityService : AccessibilityService() {
         val snapshot = collectVisibleSnapshot(root)
         val sourceLabel = application.settings.sourceLabel(expectedPackage) ?: expectedPackage
         val includeItemTitle = !application.settings.hideItemNames
-        databaseExecutor.execute {
-            if (generation != sampleGeneration) return@execute
-            if (!application.settings.hasAcceptedScreenCaptureDisclosure || application.settings.capturePaused) {
-                return@execute
-            }
-            if (!application.settings.isSourceEnabled(expectedPackage)) return@execute
+        if (destroyed) return
+        runCatching {
+            databaseExecutor.execute {
+                runCatching {
+                    if (generation != sampleGeneration || destroyed) return@execute
+                    if (!application.settings.hasAcceptedScreenCaptureDisclosure || application.settings.capturePaused) {
+                        return@execute
+                    }
+                    if (!application.settings.isSourceEnabled(expectedPackage)) return@execute
 
-            val outcome = ParcelScreenParser.parseSnapshot(
-                sourcePackage = expectedPackage,
-                sourceLabel = sourceLabel,
-                snapshot = snapshot,
-                observedAt = observedAt,
-                includeItemTitle = includeItemTitle
-            )
-            val fresh = outcome.parcels.filter(::isFreshObservation)
-            if (fresh.isEmpty()) {
-                val code = if (outcome.parcels.isNotEmpty()) {
-                    CaptureDiagnosticCode.DUPLICATE_IGNORED
-                } else {
-                    outcome.diagnosticCode
-                }
-                recordDiagnostic(
-                    application = application,
-                    observedAt = observedAt,
-                    sourcePackage = expectedPackage,
-                    code = code,
-                    pageKind = outcome.pageKind,
-                    visibleNodeCount = snapshot.visibleNodeCount,
-                    textNodeCount = outcome.textNodeCount,
-                    candidateCount = outcome.parcels.size
-                )
-                return@execute
-            }
+                    val outcome = ParcelScreenParser.parseSnapshot(
+                        sourcePackage = expectedPackage,
+                        sourceLabel = sourceLabel,
+                        snapshot = snapshot,
+                        observedAt = observedAt,
+                        includeItemTitle = includeItemTitle
+                    )
+                    val fresh = outcome.parcels.filter(::isFreshObservation)
+                    if (fresh.isEmpty()) {
+                        val code = if (outcome.parcels.isNotEmpty()) {
+                            CaptureDiagnosticCode.DUPLICATE_IGNORED
+                        } else {
+                            outcome.diagnosticCode
+                        }
+                        recordDiagnostic(
+                            application = application,
+                            observedAt = observedAt,
+                            sourcePackage = expectedPackage,
+                            code = code,
+                            pageKind = outcome.pageKind,
+                            visibleNodeCount = snapshot.visibleNodeCount,
+                            textNodeCount = outcome.textNodeCount,
+                            candidateCount = outcome.parcels.size
+                        )
+                        return@execute
+                    }
 
-            runCatching { application.repository.acceptAll(fresh) }
-                .onSuccess { result ->
+                    val result = runCatching { application.repository.acceptAll(fresh) }.getOrElse {
+                        recordDiagnostic(
+                            application = application,
+                            observedAt = observedAt,
+                            sourcePackage = expectedPackage,
+                            code = CaptureDiagnosticCode.STORAGE_ERROR,
+                            pageKind = outcome.pageKind,
+                            visibleNodeCount = snapshot.visibleNodeCount,
+                            textNodeCount = outcome.textNodeCount,
+                            candidateCount = fresh.size
+                        )
+                        return@execute
+                    }
                     recordDiagnostic(
                         application = application,
                         observedAt = observedAt,
@@ -170,13 +185,27 @@ class ParcelAccessibilityService : AccessibilityService() {
                         application = application,
                         observedAt = observedAt,
                         sourcePackage = expectedPackage,
-                        code = CaptureDiagnosticCode.STORAGE_ERROR,
-                        pageKind = outcome.pageKind,
+                        code = CaptureDiagnosticCode.PROCESSING_ERROR,
+                        pageKind = "processing",
                         visibleNodeCount = snapshot.visibleNodeCount,
-                        textNodeCount = outcome.textNodeCount,
-                        candidateCount = fresh.size
+                        textNodeCount = snapshot.fullText.size,
+                        candidateCount = 0
                     )
                 }
+            }
+        }.onFailure {
+            if (!destroyed) {
+                recordDiagnostic(
+                    application = application,
+                    observedAt = observedAt,
+                    sourcePackage = expectedPackage,
+                    code = CaptureDiagnosticCode.PROCESSING_ERROR,
+                    pageKind = "queue",
+                    visibleNodeCount = snapshot.visibleNodeCount,
+                    textNodeCount = snapshot.fullText.size,
+                    candidateCount = 0
+                )
+            }
         }
     }
 
@@ -191,8 +220,9 @@ class ParcelAccessibilityService : AccessibilityService() {
         candidateCount: Int
     ) {
         if (!application.settings.diagnosticsEnabled) return
-        application.diagnostics.record(
-            application.diagnostics.create(
+        runCatching {
+            application.diagnostics.record(
+                application.diagnostics.create(
                 observedAt = observedAt,
                 sourcePackage = sourcePackage,
                 sourceLabel = application.settings.sourceLabel(sourcePackage) ?: sourcePackage,
@@ -201,12 +231,13 @@ class ParcelAccessibilityService : AccessibilityService() {
                 visibleNodeCount = visibleNodeCount,
                 textNodeCount = textNodeCount,
                 candidateCount = candidateCount
+                )
             )
-        )
+        }
     }
 
     private fun showCaptureToast(application: ParcelInboxApplication, count: Int) {
-        if (count <= 0) return
+        if (count <= 0 || !application.settings.showCaptureConfirmation || destroyed) return
         val message = if (application.settings.appLanguage == AppLanguage.CHINESE) {
             "Parcelume 已整理 $count 个包裹"
         } else {
@@ -280,6 +311,7 @@ class ParcelAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onDestroy() {
+        destroyed = true
         val application = applicationContext as? ParcelInboxApplication
         application?.settings?.unregisterChangeListener(settingsChangeListener)
         cancelPendingSamples()

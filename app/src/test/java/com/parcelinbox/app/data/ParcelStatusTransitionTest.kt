@@ -35,4 +35,28 @@ class ParcelStatusTransitionTest {
             resolveParcelStatus(ParcelStatus.EXCEPTION, ParcelStatus.IN_TRANSIT)
         )
     }
+
+    @Test
+    fun genericPendingDoesNotEraseAnExistingException() {
+        assertEquals(
+            ParcelStatus.EXCEPTION,
+            resolveParcelStatus(ParcelStatus.EXCEPTION, ParcelStatus.PENDING)
+        )
+    }
+
+    @Test
+    fun lateExceptionDoesNotRegressDeliveredParcel() {
+        assertEquals(
+            ParcelStatus.DELIVERED,
+            resolveParcelStatus(ParcelStatus.DELIVERED, ParcelStatus.EXCEPTION)
+        )
+    }
+
+    @Test
+    fun lateExceptionDoesNotRegressReadyForPickupParcel() {
+        assertEquals(
+            ParcelStatus.READY_FOR_PICKUP,
+            resolveParcelStatus(ParcelStatus.READY_FOR_PICKUP, ParcelStatus.EXCEPTION)
+        )
+    }
 }

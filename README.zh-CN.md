@@ -53,7 +53,7 @@ Parcelume 可能提取来源、可选商品标题、订单号、物流状态、�
 
 ## 下载测试版
 
-从 [`v0.3.6-preview`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.6-preview) 下载 `parcelume-0.3.6-debug.apk`。这是用于体验和验证的调试签名版本，不是应用商店正式版本；开启系统权限前请先阅读下方限制。SHA-256：`82F09E403CE44238969103C5B9C7F0893FA1A45D75C18EC5D3496F6CB92966CC`。
+从 [`v0.3.7-preview`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.7-preview) 下载 `parcelume-0.3.7-debug.apk`。这是用于体验和验证的调试签名版本，不是应用商店正式版本；开启系统权限前请先阅读下方限制。SHA-256：`B702AE4749648C5B4180EF3FD3D6B2FD6C964316499DA406944B4A5A6027C2C9`。
 
 ## 使用方法
 
@@ -100,7 +100,7 @@ Parcelume 可能提取来源、可选商品标题、订单号、物流状态、�
 
 ## 当前支持来源
 
-0.3.6 继续为淘宝、京东、拼多多、天猫、菜鸟和顺丰维护独立识别规则，并在界面中把它们与实验性来源分开显示。外卖/即时配送以及退款、取消和售后页面仍会被明确排除。Amazon、Temu、AliExpress、eBay、Walmart、SHEIN、Etsy、Alibaba.com、Lazada、Shopee Indonesia、Flipkart、Mercado Libre 和日本乐天市场仍保留在可选来源中，但目前属于实验性兼容。
+0.3.7 继续为淘宝、京东、拼多多、天猫、菜鸟和顺丰维护独立识别规则，并在界面中把它们与实验性来源分开显示。外卖/即时配送以及退款、取消和售后页面仍会被明确排除。Amazon、Temu、AliExpress、eBay、Walmart、SHEIN、Etsy、Alibaba.com、Lazada、Shopee Indonesia、Flipkart、Mercado Libre 和日本乐天市场仍保留在可选来源中，但目前属于实验性兼容。
 
 “支持”表示 Parcelume 可以识别已知页面和通知格式，并不表示本项目与这些公司存在合作或代表关系。页面布局、文案、自定义渲染方式、地区和版本变化都会影响准确率。
 
@@ -135,7 +135,7 @@ APK 生成位置：`app/build/outputs/apk/debug/app-debug.apk`。
 
 ## 项目状态
 
-0.3.6 是当前最新预览版。它新增逐项检查设置、每轮只测一个平台的真机测试向导，以及仅包含元数据的单轮报告；GitHub CI 也新增 Android 15 界面与安全测试。本地已通过 50 项单元测试、3 项 Android 15 设备测试、零错误 Lint、APK 签名验证，以及“不含联网和网络状态权限”的 Manifest 检查。购物应用真实页面仍必须通过实体设备进行脱敏验证。
+0.3.7 是当前最新预览版。它加固了后台服务生命周期异常处理，阻止旧页面或旧通知让状态与时间倒退，避免把促销码当作无标签运单号，能够安全处理未知数据库状态，并把识别成功提示改为默认静默、用户可选。本地已通过 58 项单元测试、连续三轮每轮 5 项 Android 15 设备测试、零错误 Lint、APK Signature Scheme v2 验签，以及“不含联网和网络状态权限”的 Manifest 检查。购物应用真实页面仍必须通过实体设备进行脱敏验证。
 
 ## 参与贡献
 

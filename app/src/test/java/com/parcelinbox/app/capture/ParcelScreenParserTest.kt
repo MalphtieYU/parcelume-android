@@ -403,6 +403,33 @@ class ParcelScreenParserTest {
     }
 
     @Test
+    fun promotionalCodeIsNotTreatedAsAnUnlabelledTrackingNumber() {
+        val result = ParcelScreenParser.parse(
+            sourcePackage = "com.taobao.taobao",
+            sourceLabel = "淘宝",
+            visibleTexts = listOf(
+                "订单好物推荐",
+                "包裹专享优惠码 AB1234567890",
+                "待发货商品限时活动"
+            )
+        )
+
+        assertEquals(null, result)
+    }
+
+    @Test
+    fun unlabelledTrackingNumberStillWorksNearLogisticsContext() {
+        val result = ParcelScreenParser.parse(
+            sourcePackage = "com.taobao.taobao",
+            sourceLabel = "淘宝",
+            visibleTexts = listOf("物流详情", "包裹运输中", "SF1234567890")
+        )
+
+        assertEquals("SF1234567890", result?.trackingNumber)
+        assertEquals(ParcelStatus.IN_TRANSIT, result?.status)
+    }
+
+    @Test
     fun partiallyVisibleSecondJdCardDoesNotChangeFirstCardStatus() {
         val first = listOf(
             "订单详情", "订单跟踪", "商品：平台测试包裹01", "京东订单号：JDORDER2026092901",

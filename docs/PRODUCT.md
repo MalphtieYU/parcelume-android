@@ -1,4 +1,4 @@
-# 产品定义（0.3.6 Device Test Preview）
+# 产品定义（0.3.7 Stability Preview）
 
 ## 一句话定位
 

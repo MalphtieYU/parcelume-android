@@ -127,6 +127,12 @@ class LocalSettings(context: Context) {
             preferences.edit { putBoolean(KEY_HIDE_ITEM_NAMES, value) }
         }
 
+    var showCaptureConfirmation: Boolean
+        get() = preferences.getBoolean(KEY_SHOW_CAPTURE_CONFIRMATION, false)
+        set(value) {
+            preferences.edit { putBoolean(KEY_SHOW_CAPTURE_CONFIRMATION, value) }
+        }
+
     var diagnosticsEnabled: Boolean
         get() = if (preferences.contains(KEY_DIAGNOSTICS_ENABLED)) {
             preferences.getBoolean(KEY_DIAGNOSTICS_ENABLED, true)
@@ -148,6 +154,7 @@ class LocalSettings(context: Context) {
         const val KEY_SCREEN_CAPTURE_DISCLOSURE = "privacy_disclosure_v2"
         const val KEY_CAPTURE_PAUSED = "capture_paused"
         const val KEY_HIDE_ITEM_NAMES = "hide_item_names"
+        const val KEY_SHOW_CAPTURE_CONFIRMATION = "show_capture_confirmation"
         const val KEY_DIAGNOSTICS_ENABLED = "diagnostics_enabled"
         const val SOURCE_KEY_PREFIX = "source."
     }

@@ -25,8 +25,12 @@ fun ParcelStatus.progressRank(): Int = when (this) {
 fun resolveParcelStatus(existing: ParcelStatus?, incoming: ParcelStatus): ParcelStatus {
     if (existing == null) return incoming
     if (existing == ParcelStatus.COMPLETED) return ParcelStatus.COMPLETED
-    if (incoming == ParcelStatus.EXCEPTION) return ParcelStatus.EXCEPTION
-    if (existing == ParcelStatus.EXCEPTION) return incoming
+    if (incoming == ParcelStatus.EXCEPTION) {
+        return if (existing.progressRank() >= ParcelStatus.DELIVERED.progressRank()) existing else incoming
+    }
+    if (existing == ParcelStatus.EXCEPTION) {
+        return if (incoming == ParcelStatus.PENDING) existing else incoming
+    }
     return if (incoming.progressRank() >= existing.progressRank()) incoming else existing
 }
 

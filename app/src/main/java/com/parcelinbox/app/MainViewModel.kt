@@ -66,6 +66,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _hideItemNames = MutableStateFlow(app.settings.hideItemNames)
     val hideItemNames = _hideItemNames.asStateFlow()
 
+    private val _showCaptureConfirmation = MutableStateFlow(app.settings.showCaptureConfirmation)
+    val showCaptureConfirmation = _showCaptureConfirmation.asStateFlow()
+
     private val _diagnosticsEnabled = MutableStateFlow(app.settings.diagnosticsEnabled)
     val diagnosticsEnabled = _diagnosticsEnabled.asStateFlow()
     val latestDiagnostic: StateFlow<CaptureDiagnostic?> = app.diagnostics.latest
@@ -90,6 +93,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _hasAcceptedPrivacyDisclosure.value = app.settings.hasAcceptedScreenCaptureDisclosure
         _capturePaused.value = app.settings.capturePaused
         _hideItemNames.value = app.settings.hideItemNames
+        _showCaptureConfirmation.value = app.settings.showCaptureConfirmation
         _diagnosticsEnabled.value = app.settings.diagnosticsEnabled
     }
 
@@ -173,6 +177,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setHideItemNames(hidden: Boolean) {
         app.settings.hideItemNames = hidden
         _hideItemNames.value = hidden
+    }
+
+    fun setShowCaptureConfirmation(enabled: Boolean) {
+        app.settings.showCaptureConfirmation = enabled
+        _showCaptureConfirmation.value = enabled
     }
 
     fun setDiagnosticsEnabled(enabled: Boolean) {

@@ -26,6 +26,7 @@ Parcelume turns order and delivery details already visible in user-selected shop
 - **Guided device testing** — checks the required settings, times one source at a time, and shares only a metadata-only report.
 - **Local correction** — rename, change status, delete one record, or undo parcels newly inserted by the latest capture.
 - **Bilingual UI** — switch between Chinese and English without changing features or layout.
+- **Quiet by default** — successful background captures do not interrupt shopping; an optional confirmation can be enabled in settings.
 
 ## Preview
 
@@ -53,7 +54,7 @@ Parcelume may extract the source, optional item title, order reference, delivery
 
 ## Download the preview
 
-Download [`parcelume-0.3.6-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.6-preview) from the 0.3.6 preview release. This is a debug-signed evaluation build, not a production Play Store build; review the limitations below before granting system access. SHA-256: `82F09E403CE44238969103C5B9C7F0893FA1A45D75C18EC5D3496F6CB92966CC`.
+Download [`parcelume-0.3.7-debug.apk`](https://github.com/MalphtieYU/parcelume-android/releases/tag/v0.3.7-preview) from the 0.3.7 preview release. This is a debug-signed evaluation build, not a production Play Store build; review the limitations below before granting system access. SHA-256: `B702AE4749648C5B4180EF3FD3D6B2FD6C964316499DA406944B4A5A6027C2C9`.
 
 ## Quick start
 
@@ -100,7 +101,7 @@ See [Privacy details](docs/PRIVACY.md) for the exact boundary.
 
 ## Supported sources
 
-Version 0.3.6 keeps independent parsing rules for Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express and labels them separately from experimental sources in the interface. Food/instant-delivery and refund, cancellation, or after-sales pages remain explicitly excluded. Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba remain selectable but experimental.
+Version 0.3.7 keeps independent parsing rules for Taobao, JD, Pinduoduo, Tmall, Cainiao, and SF Express and labels them separately from experimental sources in the interface. Food/instant-delivery and refund, cancellation, or after-sales pages remain explicitly excluded. Amazon, Temu, AliExpress, eBay, Walmart, SHEIN, Etsy, Alibaba.com, Lazada, Shopee Indonesia, Flipkart, Mercado Libre, and Rakuten Ichiba remain selectable but experimental.
 
 Support means Parcelume recognizes known visible-page and notification patterns; it does not integrate with or represent these companies. Layout, wording, custom-rendered views, region, and app-version changes can reduce recognition accuracy.
 
@@ -135,7 +136,7 @@ Run verification:
 
 ## Project status
 
-Version 0.3.6 is the latest preview. It adds a guided, one-source-at-a-time real-device test flow, a per-run metadata-only report, and Android 15 UI/security tests in CI. Local verification passed 50 unit tests, 3 Android 15 instrumentation tests, Lint with zero errors, APK signature verification, and a manifest check confirming that no internet or network-state permission is present. Real shopping-app layouts still require privacy-safe validation on physical devices.
+Version 0.3.7 is the latest preview. It hardens service-lifecycle failure handling, prevents stale observations from moving status or timestamps backwards, rejects promotion codes as unlabelled tracking numbers, safely handles unknown stored statuses, and makes capture confirmations opt-in. Local verification passed 58 unit tests and three consecutive rounds of 5 Android 15 instrumentation tests, plus Lint with zero errors, APK Signature Scheme v2 verification, and a manifest check confirming that no internet or network-state permission is present. Real shopping-app layouts still require privacy-safe validation on physical devices.
 
 ## Contributing
 

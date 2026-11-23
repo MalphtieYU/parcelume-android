@@ -122,8 +122,10 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                 put("pickup_fingerprint", crypto.fingerprint(it))
             }
             put("status", resolvedStatus.name)
-            put("updated_at", parsed.observedAt)
-            put("capture_method", parsed.captureMethod.name)
+            put("updated_at", maxOf(existing?.updatedAt ?: parsed.observedAt, parsed.observedAt))
+            if (existing == null || parsed.observedAt >= existing.updatedAt) {
+                put("capture_method", parsed.captureMethod.name)
+            }
             if (completedAt != null) put("completed_at", completedAt)
         }
 
@@ -217,7 +219,7 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
                             orderReference = crypto.decrypt(cursor.getString(cursor.getColumnIndexOrThrow("order_reference"))),
                             trackingNumber = crypto.decrypt(cursor.getString(cursor.getColumnIndexOrThrow("tracking_number"))),
                             pickupCode = crypto.decrypt(cursor.getString(cursor.getColumnIndexOrThrow("pickup_code"))),
-                            status = ParcelStatus.valueOf(cursor.getString(cursor.getColumnIndexOrThrow("status"))),
+                            status = cursor.safeParcelStatus(),
                             createdAt = cursor.getLong(cursor.getColumnIndexOrThrow("created_at")),
                             updatedAt = cursor.getLong(cursor.getColumnIndexOrThrow("updated_at")),
                             completedAt = cursor.getNullableLong("completed_at"),
@@ -342,10 +344,15 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
 
     private fun android.database.Cursor.toExistingRecord(): ExistingRecord = ExistingRecord(
         id = getLong(getColumnIndexOrThrow("id")),
-        status = ParcelStatus.valueOf(getString(getColumnIndexOrThrow("status"))),
+        status = safeParcelStatus(),
         trackingFingerprint = getString(getColumnIndexOrThrow("tracking_fingerprint")),
-        completedAt = getNullableLong("completed_at")
+        completedAt = getNullableLong("completed_at"),
+        updatedAt = getLong(getColumnIndexOrThrow("updated_at"))
     )
+
+    private fun android.database.Cursor.safeParcelStatus(): ParcelStatus = runCatching {
+        ParcelStatus.valueOf(getString(getColumnIndexOrThrow("status")))
+    }.getOrDefault(ParcelStatus.EXCEPTION)
 
     private fun android.database.Cursor.getNullableLong(column: String): Long? {
         val index = getColumnIndexOrThrow(column)
@@ -353,7 +360,7 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
     }
 
     private companion object {
-        val EXISTING_COLUMNS = arrayOf("id", "status", "tracking_fingerprint", "completed_at")
+        val EXISTING_COLUMNS = arrayOf("id", "status", "tracking_fingerprint", "completed_at", "updated_at")
         const val PICKUP_MATCH_WINDOW_MS = 14L * 24L * 60L * 60L * 1000L
         const val DATABASE_NAME = "parcel_inbox.db"
         const val DATABASE_VERSION = 4
@@ -363,7 +370,8 @@ class ParcelDatabase(context: Context) : SQLiteOpenHelper(
         val id: Long,
         val status: ParcelStatus,
         val trackingFingerprint: String?,
-        val completedAt: Long?
+        val completedAt: Long?,
+        val updatedAt: Long
     )
 }
 

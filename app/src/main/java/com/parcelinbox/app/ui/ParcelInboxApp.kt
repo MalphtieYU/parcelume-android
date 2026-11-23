@@ -715,6 +715,7 @@ private fun MainShell(
     val hasAcceptedPrivacyDisclosure by viewModel.hasAcceptedPrivacyDisclosure.collectAsState()
     val capturePaused by viewModel.capturePaused.collectAsState()
     val hideItemNames by viewModel.hideItemNames.collectAsState()
+    val showCaptureConfirmation by viewModel.showCaptureConfirmation.collectAsState()
     val diagnosticsEnabled by viewModel.diagnosticsEnabled.collectAsState()
     val latestDiagnostic by viewModel.latestDiagnostic.collectAsState()
     val diagnosticHistory by viewModel.diagnosticHistory.collectAsState()
@@ -781,6 +782,7 @@ private fun MainShell(
                     hasAcceptedPrivacyDisclosure = hasAcceptedPrivacyDisclosure,
                     capturePaused = capturePaused,
                     hideItemNames = hideItemNames,
+                    showCaptureConfirmation = showCaptureConfirmation,
                     diagnosticsEnabled = diagnosticsEnabled,
                     latestDiagnostic = latestDiagnostic,
                     diagnosticHistory = diagnosticHistory,
@@ -794,6 +796,7 @@ private fun MainShell(
                     onSetLanguage = viewModel::setLanguage,
                     onSetCapturePaused = viewModel::setCapturePaused,
                     onSetHideItemNames = viewModel::setHideItemNames,
+                    onSetShowCaptureConfirmation = viewModel::setShowCaptureConfirmation,
                     onSetDiagnosticsEnabled = viewModel::setDiagnosticsEnabled,
                     onClearDiagnostics = viewModel::clearDiagnostics,
                     onShareCompatibilityReport = onShareCompatibilityReport,
@@ -1352,6 +1355,7 @@ private fun SettingsScreen(
     hasAcceptedPrivacyDisclosure: Boolean,
     capturePaused: Boolean,
     hideItemNames: Boolean,
+    showCaptureConfirmation: Boolean,
     diagnosticsEnabled: Boolean,
     latestDiagnostic: CaptureDiagnostic?,
     diagnosticHistory: List<CaptureDiagnostic>,
@@ -1365,6 +1369,7 @@ private fun SettingsScreen(
     onSetLanguage: (AppLanguage) -> Unit,
     onSetCapturePaused: (Boolean) -> Unit,
     onSetHideItemNames: (Boolean) -> Unit,
+    onSetShowCaptureConfirmation: (Boolean) -> Unit,
     onSetDiagnosticsEnabled: (Boolean) -> Unit,
     onClearDiagnostics: () -> Unit,
     onShareCompatibilityReport: (String) -> Unit,
@@ -1536,6 +1541,21 @@ private fun SettingsScreen(
                     lineHeight = 17.sp
                 )
                 HorizontalDivider(color = Color(0xFFF0EDF1))
+                SettingSwitchRow(
+                    title = tr("识别成功时提示", "Show capture confirmations"),
+                    checked = showCaptureConfirmation,
+                    onCheckedChange = onSetShowCaptureConfirmation
+                )
+                Text(
+                    tr(
+                        "默认关闭，后台识别保持安静；开启后每次新增包裹会显示简短提示。",
+                        "Off by default for quiet background capture. Turn it on to show a brief confirmation when parcels are added."
+                    ),
+                    color = Muted,
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp
+                )
+                HorizontalDivider(color = Color(0xFFF0EDF1))
                 Text(
                     tr(
                         "敏感字段已使用 Android Keystore 本地加密；付款、银行卡、密码和验证码页面拒绝解析；应用内容禁止截屏和最近任务预览。",
@@ -1614,7 +1634,10 @@ private fun SettingsScreen(
                         )
                         Text(
                             health,
-                            color = if (diagnostic?.code == CaptureDiagnosticCode.STORAGE_ERROR) {
+                            color = if (
+                                diagnostic?.code == CaptureDiagnosticCode.STORAGE_ERROR ||
+                                diagnostic?.code == CaptureDiagnosticCode.PROCESSING_ERROR
+                            ) {
                                 MaterialTheme.colorScheme.error
                             } else {
                                 Muted
@@ -2406,6 +2429,7 @@ private fun CaptureDiagnostic.localizedSummary(): String {
         CaptureDiagnosticCode.DUPLICATE_IGNORED -> tr("内容已存在，未重复添加", "Already saved; duplicate ignored")
         CaptureDiagnosticCode.ROOT_UNAVAILABLE -> tr("系统暂未提供页面内容", "Page content temporarily unavailable")
         CaptureDiagnosticCode.STORAGE_ERROR -> tr("本地保存失败", "Local save failed")
+        CaptureDiagnosticCode.PROCESSING_ERROR -> tr("本次处理异常，已安全跳过", "Processing failed; safely skipped")
         CaptureDiagnosticCode.NO_VISIBLE_TEXT -> tr("页面未暴露可读文字", "No readable page text")
         CaptureDiagnosticCode.UNSUPPORTED_PAGE -> tr("非订单/物流页或暂不支持", "Unsupported or non-order page")
         CaptureDiagnosticCode.LOW_CONFIDENCE -> tr("信息不足，未自动保存", "Not enough reliable fields")
@@ -2460,6 +2484,7 @@ private fun CaptureDiagnostic.localizedResultLabel(): String = when (code) {
         CaptureDiagnosticCode.DUPLICATE_IGNORED -> tr("重复内容已忽略", "Duplicate ignored")
         CaptureDiagnosticCode.ROOT_UNAVAILABLE -> tr("页面尚未就绪", "Page not ready")
         CaptureDiagnosticCode.STORAGE_ERROR -> tr("本地保存失败", "Local save failed")
+        CaptureDiagnosticCode.PROCESSING_ERROR -> tr("处理异常，已跳过", "Processing skipped safely")
         CaptureDiagnosticCode.NO_VISIBLE_TEXT -> tr("无可读文字", "No readable text")
         CaptureDiagnosticCode.UNSUPPORTED_PAGE -> tr("不是支持的订单页", "Unsupported page")
         CaptureDiagnosticCode.LOW_CONFIDENCE -> tr("信息不足", "Not enough reliable fields")

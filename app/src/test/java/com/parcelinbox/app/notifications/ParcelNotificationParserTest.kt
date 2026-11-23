@@ -96,4 +96,29 @@ class ParcelNotificationParserTest {
 
         assertNull(parsed)
     }
+
+    @Test
+    fun `does not mistake a promotion code for a tracking number`() {
+        val parsed = ParcelNotificationParser.parse(
+            sourcePackage = "com.taobao.taobao",
+            sourceLabel = "淘宝",
+            notificationTitle = "包裹好物推荐",
+            notificationText = "物流会员优惠码 AB1234567890，限时领取"
+        )
+
+        assertNull(parsed)
+    }
+
+    @Test
+    fun `accepts an unlabelled tracking number beside delivery context`() {
+        val parsed = ParcelNotificationParser.parse(
+            sourcePackage = "com.taobao.taobao",
+            sourceLabel = "淘宝",
+            notificationTitle = "包裹运输中",
+            notificationText = "物流更新\nSF1234567890"
+        )
+
+        assertEquals("SF1234567890", parsed?.trackingNumber)
+        assertEquals(ParcelStatus.IN_TRANSIT, parsed?.status)
+    }
 }

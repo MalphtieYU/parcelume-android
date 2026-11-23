@@ -53,7 +53,7 @@ class DeviceTestSupportTest {
                 )
             ),
             chinese = true,
-            appVersion = "0.3.6",
+            appVersion = "0.3.7",
             testContext = DeviceTestReportContext(
                 sourceLabel = "京东",
                 startedAt = 1000L,
